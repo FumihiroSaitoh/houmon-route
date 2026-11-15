@@ -1,0 +1,466 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#0f6e56">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="訪問ルート">
+<title>訪問診療 最短コース選定 v1.6.0</title>
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+<style>
+*{box-sizing:border-box}
+body{margin:0;font-family:-apple-system,"Hiragino Sans","Noto Sans JP",sans-serif;background:#f4f6f8;color:#1c2733;font-size:15px}
+header{background:#0f6e56;color:#fff;padding:12px 16px}
+header h1{margin:0;font-size:18px}
+header p{margin:4px 0 0;font-size:12px;opacity:.9}
+main{max-width:980px;margin:0 auto;padding:12px}
+.card{background:#fff;border-radius:10px;padding:12px;margin-bottom:12px;box-shadow:0 1px 3px rgba(0,0,0,.08)}
+h2{font-size:15px;margin:0 0 8px}
+label{font-size:12px;color:#5b6b7a;display:block;margin-bottom:2px}
+input[type=text],input[type=time],input[type=number]{width:100%;padding:8px;border:1px solid #c9d3dc;border-radius:6px;font-size:15px;background:#fff}
+.row2{display:grid;grid-template-columns:2fr 1fr;gap:8px}
+.visit{border:1px solid #e1e7ec;border-radius:8px;padding:8px;margin-bottom:8px;position:relative}
+.visit .g{display:grid;grid-template-columns:1fr 1fr 1fr;gap:6px;margin-top:6px}
+.visit .top{display:grid;grid-template-columns:80px 1fr auto auto 32px;gap:6px;align-items:end}
+.btns{display:contents}
+.pick{border:0;background:#e7efec;color:#0f6e56;border-radius:6px;height:36px;font-size:13px;padding:0 8px;white-space:nowrap}
+.del{border:0;background:#eee;border-radius:6px;height:36px;font-size:16px}
+button.main{background:#0f6e56;color:#fff;border:0;border-radius:8px;padding:12px 16px;font-size:16px;width:100%;font-weight:600}
+button.sub{background:#e7efec;color:#0f6e56;border:0;border-radius:8px;padding:9px 12px;font-size:14px}
+button:disabled{opacity:.5}
+#map{height:420px;border-radius:10px}
+.stop{display:flex;gap:10px;padding:8px 0;border-bottom:1px solid #eef1f4}
+.num{background:#0f6e56;color:#fff;border-radius:50%;width:26px;height:26px;display:flex;align-items:center;justify-content:center;font-size:13px;flex:none}
+.late{color:#c0392b;font-weight:600}
+.wait{color:#b9770e}
+.small{font-size:12px;color:#5b6b7a}
+#msg{font-size:13px;margin:8px 0;white-space:pre-wrap}
+.err{color:#c0392b}
+a.link{display:block;margin:6px 0;color:#0b57d0}
+.warn{background:#fff7e0;border:1px solid #f0d98a;border-radius:8px;padding:8px;font-size:12px}
+@media(max-width:600px){
+  body{font-size:16px}
+  input[type=text],input[type=time],input[type=number]{font-size:16px;min-height:44px}
+  header{padding:10px 12px;padding-top:max(10px,env(safe-area-inset-top))}
+  header h1{font-size:17px}
+  main{padding:8px;padding-bottom:max(16px,env(safe-area-inset-bottom))}
+  .card{padding:10px}
+  .row2{grid-template-columns:1fr}
+  .visit .top{grid-template-columns:52px 1fr;row-gap:6px}
+  .visit .top .pick,.visit .top .del{height:44px;font-size:14px}
+  .visit .top .btns{grid-column:1 / -1;display:grid;grid-template-columns:1fr 1fr 56px;gap:6px}
+  .visit .g{grid-template-columns:1fr 1fr}
+  .visit .g > div:last-child{grid-column:1 / -1}
+  button.main{padding:14px;font-size:17px}
+  button.sub{min-height:44px}
+  .pick{min-height:44px}
+  #facs{grid-template-columns:repeat(3,1fr) !important}
+  #map{height:55vh}
+  #mapcard.picking #map{height:calc(100dvh - 90px)}
+  .stop{padding:10px 0}
+}
+#mapcard.picking{position:fixed;inset:0;z-index:2000;margin:0;border-radius:0;padding:8px;overflow:auto}
+#mapcard.picking #map{height:calc(100vh - 80px)}
+#nomap{display:none;background:#fdecea;border:1px solid #f1b0a8;border-radius:8px;padding:8px;margin:8px 12px;font-size:13px;color:#922}
+#pickbar{display:none;background:#fff3cd;border:1px solid #f0d98a;border-radius:8px;padding:8px;margin-bottom:8px;font-size:14px}
+</style>
+</head>
+<body>
+<header>
+  <h1>訪問診療 最短コース選定 <span id="ver" style="font-size:12px;font-weight:400;background:rgba(255,255,255,.2);border-radius:10px;padding:2px 8px;margin-left:6px"></span></h1>
+  <p>患家の都合（◯時以降・◯時まで）を守りつつ、車での総所要時間が最短になる順番を計算します</p>
+</header>
+<div id="nomap">地図の部品を読み込めませんでした（インターネット接続、またはファイルを開いたアプリの制限が原因の可能性があります）。「📍地図」と地図表示は使えません。Chrome/Safariなどのブラウザで開き直してください。住所の手入力での計算は可能です。</div>
+<main>
+<div class="card">
+  <h2>① 出発地・時刻</h2>
+  <div class="row2">
+    <div><label>出発地の住所（初期値：大泉生協病院）</label><div style="display:flex;gap:6px"><input type="text" id="start" value="東京都練馬区東大泉6-3-3" placeholder="例：東京都練馬区東大泉○-○-○"><button class="pick" id="startPick">📍地図</button></div></div>
+    <div><label>出発時刻</label><input type="time" id="depart" value="13:30"></div>
+  </div>
+  <div style="margin-top:8px"><label><input type="checkbox" id="roundtrip" checked> 最後に出発地へ戻る</label></div>
+</div>
+
+<div class="card">
+  <h2>渋滞の補正（移動時間に掛ける倍率）</h2>
+  <label><input type="checkbox" id="usefac" checked> 時間帯ごとの補正を使う</label>
+  <div id="facs" style="display:grid;grid-template-columns:repeat(5,1fr);gap:6px;margin-top:8px">
+    <div><label>〜7:00</label><input type="number" step="0.05" min="0.5" max="3" class="fac" value="1"></div>
+    <div><label>7:00〜9:00</label><input type="number" step="0.05" min="0.5" max="3" class="fac" value="1.3"></div>
+    <div><label>9:00〜16:00</label><input type="number" step="0.05" min="0.5" max="3" class="fac" value="1"></div>
+    <div><label>16:00〜19:00</label><input type="number" step="0.05" min="0.5" max="3" class="fac" value="1.5"></div>
+    <div><label>19:00〜</label><input type="number" step="0.05" min="0.5" max="3" class="fac" value="1"></div>
+  </div>
+  <div class="small" style="margin-top:6px">各区間の「出発した時刻」の倍率を使います。7〜9時の1.3は仮の値です。休日は全て1にしてください。</div>
+</div>
+
+<div class="card">
+  <h2>② 患家（8〜10件程度・最大12件）</h2>
+  <div class="small" style="margin-bottom:8px">患家の名前は A, B, C… が自動で付きます（個人名は入力不要）。住所は入力するか、「📍地図」を押して地図上の家をタップ（Googleマップの「緯度,経度」や長いURLの貼り付けも可）。<br>患家の都合は、あれば入力：例）14時以降なら在宅 →「以降」に14:00／16時までに来てほしい →「までに」に16:00。空欄なら指定なし。</div>
+  <div id="visits"></div>
+  <div style="display:flex;gap:8px">
+    <button class="sub" id="add">＋ 患家を追加</button>
+    <button class="sub" id="sample">入力例を表示</button>
+  </div>
+</div>
+
+<div class="card">
+  <button class="main" id="go">最短コースを計算する</button>
+  <button class="sub" id="reset" style="width:100%;margin-top:8px">🔄 リセット（新しい入力を始める）</button>
+  <div id="msg"></div>
+</div>
+
+<div class="card" id="resCard" style="display:none">
+  <h2>③ 結果</h2>
+  <div id="summary" style="font-weight:600;margin-bottom:6px"></div>
+  <div id="list"></div>
+  <div id="links" style="margin-top:8px"></div>
+</div>
+<div class="card" id="mapcard"><div id="pickbar"><span id="picktext"></span> <button class="sub" id="pickcancel">キャンセル</button></div><div id="map"></div></div>
+
+<details class="card" style="margin-top:12px"><summary><b>バージョン履歴</b>（現在 <span id="ver2"></span>）</summary><div id="chlog" class="small" style="margin-top:8px;line-height:1.7"></div></details>
+
+<div class="warn">
+  ・住所→座標は国土地理院の住所検索API、道順・所要時間は OSRM 公開サーバー（OpenStreetMap）で計算します。<b>住所・座標がこれらの外部サービスに送信されます</b>（実名・病名は入力しないでください）。<br>
+  ・所要時間は道路の平常時の目安で、渋滞・信号待ち・駐車の時間は含みません。余裕を持って「滞在時間」に駐車・移動時間を上乗せしてください。<br>
+  ・OSRM公開サーバーは試用向けです。業務で常用する場合は自前サーバーの利用を検討してください。
+</div>
+</main>
+
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script>
+/* ---------- 共通ユーティリティ ---------- */
+/* ===== バージョン管理：修正のたびにここを更新（履歴は先頭が最新） ===== */
+const VERSION = '1.6.0', VERSION_DATE = '2026-11-15';
+const DEFAULT_ADDR = '東京都練馬区';
+const DEFAULT_START = '東京都練馬区東大泉6-3-3';
+const CHANGELOG = [
+  ['1.6.0','2026-11-15','スマホ表示を最適化（入力時の自動拡大防止、ボタン拡大、2段レイアウト、ホーム画面追加対応）／ラベル文言を整理'],
+  ['1.5.0','2026-11-15','患家ごとの個別リセット（クリア）ボタンを追加'],
+  ['1.4.0','2026-11-15','リセットボタンを追加（患家・結果・地図を初期状態に戻す）'],
+  ['1.3.0','2026-11-15','出発地の初期値を大泉生協病院（東京都練馬区東大泉6-3-3）に設定'],
+  ['1.2.0','2026-11-15','表示名をA, B, C…に固定（入力欄の順に自動付番）'],
+  ['1.1.0','2026-11-15','住所欄の初期値を「東京都練馬区」に設定（市区町村以降だけ入力すればよい）'],
+  ['1.0.0','2026-11-15','バージョン表示と履歴を追加'],
+  ['0.4.0','2026-11-14','📍地図ボタンを全画面表示に変更／地図が読めない場合の案内を追加'],
+  ['0.3.0','2026-11-14','地図タップで住所入力／「◯時以降・◯時までに」へ名称変更／滞在時間の初期値10分'],
+  ['0.2.0','2026-11-14','時間帯別の渋滞補正（倍率）を追加'],
+  ['0.1.0','2026-11-14','初版：時間枠つき最短順の計算、地図表示、Googleマップ連携']
+];
+const MAXV = 12;
+const $ = id => document.getElementById(id);
+const esc = s => String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const toSec = t => { if(!t) return null; const [h,m]=t.split(':').map(Number); return h*3600+m*60; };
+const fmt = s => { s=Math.round(s/60); const h=Math.floor(s/60)%24, m=s%60; return String(h).padStart(2,'0')+':'+String(m).padStart(2,'0'); };
+const fmtDur = s => { const m=Math.round(s/60); return m>=60 ? Math.floor(m/60)+'時間'+(m%60)+'分' : m+'分'; };
+
+/* ---------- 最適化（時間枠つき巡回：分枝限定法＋ペナルティ） ----------
+   dur[i][j]: 秒 / 0=出発地, 1..n=患家
+   visits[k] = {earliest, latest, service}（秒）
+   遅刻は 1秒につきペナルティ LATE_W を加算（遅刻ゼロの解があればそれが優先される） */
+function optimize(dur, visits, depart, roundtrip, fac=()=>1, nodeLimit=3000000){
+  const n = visits.length, LATE_W = 20;
+  let best = {cost:Infinity, order:null}, nodes = 0, truncated = false;
+  const used = new Array(n).fill(false), path = [];
+    function dfs(cur, t, pen, depth){
+    if(++nodes > nodeLimit){ truncated = true; return; }
+    if(depth === n){
+      const fin = t + (roundtrip ? dur[cur][0]*fac(t) : 0);
+      const cost = (fin - depart) + pen;
+      if(cost < best.cost){ best = {cost, order: path.slice(), finish: fin}; }
+      return;
+    }
+    // 下界：ここまでの経過＋ペナルティ
+    if((t - depart) + pen >= best.cost) return;
+    // 近い順に探索
+    const cand = [];
+    for(let k=0;k<n;k++) if(!used[k]) cand.push(k);
+    cand.sort((a,b)=>dur[cur][a+1]-dur[cur][b+1]);
+    for(const k of cand){
+      const v = visits[k];
+      let arr = t + dur[cur][k+1]*fac(t);
+      let start = arr;
+      if(v.earliest!=null && start < v.earliest) start = v.earliest;
+      let p = pen;
+      if(v.latest!=null && start > v.latest) p += (start - v.latest)*LATE_W;
+      used[k]=true; path.push(k);
+      dfs(k+1, start + v.service, p, depth+1);
+      path.pop(); used[k]=false;
+      if(truncated) return;
+    }
+  }
+  dfs(0, depart, 0, 0);
+  return {order: best.order, truncated};
+}
+
+/* 順番が決まった後の時刻表を作る */
+function schedule(dur, visits, order, depart, roundtrip, fac=()=>1){
+  let cur = 0, t = depart; const rows = [];
+  for(const k of order){
+    const v = visits[k];
+    const drive = dur[cur][k+1]*fac(t);
+    const arr = t + drive;
+    let start = arr, wait = 0;
+    if(v.earliest!=null && arr < v.earliest){ start = v.earliest; wait = start-arr; }
+    const late = (v.latest!=null && start > v.latest) ? start - v.latest : 0;
+    rows.push({k, drive, arr, start, wait, late, end: start+v.service});
+    t = start + v.service; cur = k+1;
+  }
+  const back = roundtrip ? dur[cur][0]*fac(t) : 0;
+  return {rows, finish: t + back, back};
+}
+
+/* 時間帯別の渋滞補正 */
+function makeFac(){
+  if(!$('usefac').checked) return ()=>1;
+  const f=[...document.querySelectorAll('.fac')].map(e=>parseFloat(e.value)||1);
+  const b=[7*3600,9*3600,16*3600,19*3600];
+  return t=>{ t=((t%86400)+86400)%86400; let i=0; while(i<4 && t>=b[i]) i++; return f[i]; };
+}
+
+/* リセット：誤タップ防止のため2回押しで実行（3秒以内） */
+let resetTimer = null;
+$('reset').onclick = () => {
+  const b = $('reset');
+  if(!resetTimer){
+    b.textContent = '⚠ もう一度押すと、入力と結果を消去します';
+    b.style.background = '#fdecea'; b.style.color = '#922';
+    resetTimer = setTimeout(resetBtnOff, 3000);
+    return;
+  }
+  resetBtnOff();
+  endPick();
+  $('visits').innerHTML = '';
+  for(let i=0;i<8;i++) addVisit();
+  $('start').value = DEFAULT_START; delete $('start').dataset.lat; delete $('start').dataset.lon;
+  $('msg').textContent = ''; $('msg').className = '';
+  $('resCard').style.display = 'none'; $('list').innerHTML=''; $('summary').innerHTML=''; $('links').innerHTML='';
+  if(HAS_MAP){ layer.clearLayers(); map.setView([35.745, 139.59], 13); }
+  window.scrollTo({top:0, behavior:'smooth'});
+};
+function resetBtnOff(){
+  clearTimeout(resetTimer); resetTimer = null;
+  const b = $('reset'); b.textContent = '🔄 リセット（新しい入力を始める）'; b.style.background = ''; b.style.color = '';
+}
+
+/* 住所欄：初期値のままフォーカスしたら末尾にカーソルを置く */
+function caretEnd(inp){ inp.addEventListener('focus',()=>setTimeout(()=>{ if(inp.value===DEFAULT_ADDR){const l=inp.value.length; try{inp.setSelectionRange(l,l);}catch(_){}} },0)); }
+caretEnd($('start'));
+
+/* バージョン表示 */
+$('ver').textContent = 'v'+VERSION; $('ver').title = VERSION_DATE;
+$('ver2').textContent = 'v'+VERSION+'（'+VERSION_DATE+'）';
+$('chlog').innerHTML = CHANGELOG.map(c=>`v${c[0]}（${c[1]}）　${esc(c[2])}`).join('<br>');
+
+/* ---------- UI：患家入力欄 ---------- */
+/* 表示名は入力順に A, B, C… を自動で付ける（固定・編集不可） */
+function relabel(){ document.querySelectorAll('.visit .f-name').forEach((e,i)=>{ e.value = String.fromCharCode(65+i); }); }
+function addVisit(d={}){
+  if(document.querySelectorAll('.visit').length >= MAXV){ return; }
+  const div = document.createElement('div'); div.className='visit';
+  div.innerHTML = `
+   <div class="top">
+     <div><label>名前</label><input type="text" class="f-name" readonly tabindex="-1" style="text-align:center;font-weight:700;background:#eef3f1"></div>
+     <div><label>住所</label><input type="text" class="f-addr" value="${esc(d.addr ?? DEFAULT_ADDR)}" placeholder="東京都練馬区…"></div>
+     <div class="btns">
+       <button class="pick" title="地図でタップして選ぶ">📍地図</button>
+       <button class="pick clr" title="この患家の入力をクリア">↺ クリア</button>
+       <button class="del" title="この行を削除">✕</button>
+     </div>
+   </div>
+   <div class="g">
+     <div><label>この時刻以降に訪問（任意）</label><input type="time" class="f-from" value="${d.from||''}"></div>
+     <div><label>この時刻までに到着（任意）</label><input type="time" class="f-to" value="${d.to||''}"></div>
+     <div><label>滞在時間(分)</label><input type="number" class="f-svc" min="1" max="180" value="${d.svc||10}"></div>
+   </div>`;
+  div.querySelector('.del').onclick = () => { div.remove(); relabel(); };
+  const inp = div.querySelector('.f-addr');
+  inp.addEventListener('input', ()=>{ delete div.dataset.lat; delete div.dataset.lon; });
+  caretEnd(inp);
+  div.querySelector('.clr').onclick = () => {
+    inp.value = DEFAULT_ADDR; delete div.dataset.lat; delete div.dataset.lon;
+    div.querySelector('.f-from').value = ''; div.querySelector('.f-to').value = '';
+    div.querySelector('.f-svc').value = 10;
+    if(pickTarget && pickTarget.holder === div) endPick();
+  };
+  div.querySelector('.pick').onclick = () => startPick(inp, div, div.querySelector('.f-name').value || '患家');
+  $('visits').appendChild(div);
+  relabel();
+}
+$('start').addEventListener('input',()=>{ delete $('start').dataset.lat; delete $('start').dataset.lon; });
+$('add').onclick = () => addVisit();
+$('sample').onclick = () => {
+  $('visits').innerHTML='';
+  $('start').value='東京都練馬区東大泉4丁目';
+  [['A','東京都練馬区大泉学園町2丁目','','',10],['B','東京都練馬区石神井町3丁目','14:00','15:00',10],
+   ['C','東京都練馬区関町北2丁目','','16:00',10],['D','東京都練馬区富士見台2丁目','','',10]]
+   .forEach(([name,addr,from,to,svc])=>addVisit({name,addr,from,to,svc}));
+};
+for(let i=0;i<8;i++) addVisit();
+
+/* ---------- 外部API ---------- */
+async function geocode(q){
+  const r = await fetch('https://msearch.gsi.go.jp/address-search/AddressSearch?q='+encodeURIComponent(q));
+  if(!r.ok) throw new Error('住所検索に失敗');
+  const j = await r.json();
+  if(!j.length) return null;
+  const [lon,lat] = j[0].geometry.coordinates;
+  return {lat, lon, title: j[0].properties.title};
+}
+async function osrmTable(pts){
+  const c = pts.map(p=>p.lon+','+p.lat).join(';');
+  const r = await fetch('https://router.project-osrm.org/table/v1/driving/'+c+'?annotations=duration');
+  if(!r.ok) throw new Error('所要時間の計算に失敗（OSRM）');
+  const j = await r.json();
+  if(j.code!=='Ok') throw new Error('OSRM: '+j.code);
+  return j.durations;
+}
+async function osrmRoute(pts){
+  const c = pts.map(p=>p.lon+','+p.lat).join(';');
+  const r = await fetch('https://router.project-osrm.org/route/v1/driving/'+c+'?overview=full&geometries=geojson');
+  if(!r.ok) throw new Error('道順の取得に失敗（OSRM）');
+  const j = await r.json();
+  if(j.code!=='Ok') throw new Error('OSRM: '+j.code);
+  return j.routes[0];
+}
+
+/* ---------- 地図 ---------- */
+const HAS_MAP = typeof L !== 'undefined';
+let map = null, layer = null;
+if(HAS_MAP){
+  map = L.map('map').setView([35.745, 139.59], 13);
+  L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png',{maxZoom:19,attribution:'© OpenStreetMap contributors'}).addTo(map);
+  layer = L.layerGroup().addTo(map);
+} else { $('nomap').style.display='block'; }
+
+/* ---------- 地図タップで住所入力 ---------- */
+let pickTarget = null;
+function startPick(inp, holder, label){
+  if(!HAS_MAP){ $('nomap').scrollIntoView({block:'center'}); return; }
+  pickTarget = {inp, holder, label};
+  $('picktext').textContent = `「${label}」の家の位置を地図でタップしてください`;
+  $('pickbar').style.display='block';
+  $('mapcard').classList.add('picking');
+  setTimeout(()=>map.invalidateSize(),50);
+}
+function endPick(){
+  pickTarget=null; $('pickbar').style.display='none';
+  $('mapcard').classList.remove('picking');
+  if(HAS_MAP) setTimeout(()=>map.invalidateSize(),50);
+}
+$('pickcancel').onclick = () => { const t=pickTarget; endPick(); if(t) t.inp.scrollIntoView({behavior:'smooth',block:'center'}); };
+$('startPick').onclick = () => startPick($('start'), $('start'), '出発地');
+if(HAS_MAP) map.on('click', async e => {
+  if(!pickTarget) return;
+  const t = pickTarget; endPick();
+  const lat = +e.latlng.lat.toFixed(6), lon = +e.latlng.lng.toFixed(6);
+  t.holder.dataset.lat = lat; t.holder.dataset.lon = lon;
+  L.circleMarker([lat,lon],{radius:8,color:'#c0392b',weight:3,fillOpacity:.3}).addTo(layer);
+  let town = '';
+  try{
+    const r = await fetch(`https://mreversegeocoder.gsi.go.jp/reverse-geocoder/LonLatToAddress?lat=${lat}&lon=${lon}`);
+    const j = await r.json(); town = (j.results && j.results.lv01Nm) || '';
+  }catch(_){}
+  t.inp.value = `地図の地点 ${town} (${lat}, ${lon})`.replace('  ',' ');
+  t.inp.scrollIntoView({behavior:'smooth', block:'center'});
+});
+/* 「緯度,経度」やGoogleマップの長いURLから座標を取り出す */
+function parseCoords(q){
+  let m = q.match(/(-?\d{1,3}\.\d+)\s*[,，\s]\s*(-?\d{1,3}\.\d+)\s*\)?\s*$/) || q.match(/@(-?\d+\.\d+),(-?\d+\.\d+)/) || q.match(/!3d(-?\d+\.\d+)!4d(-?\d+\.\d+)/);
+  if(!m) return null;
+  const lat=+m[1], lon=+m[2];
+  return (lat>20&&lat<50&&lon>120&&lon<155) ? {lat,lon,title:q} : null;
+}
+
+function gmapsLinks(pts, roundtrip){
+  // pts: 出発地→…→(出発地)。Googleマップは経由地9件までなので、11地点ごとに分割
+  const links=[]; const CH=11;
+  for(let i=0;i<pts.length-1;i+=CH-1){
+    const seg = pts.slice(i, i+CH);
+    if(seg.length<2) break;
+    const f = p=>p.lat+','+p.lon;
+    let u='https://www.google.com/maps/dir/?api=1&travelmode=driving&origin='+f(seg[0])+'&destination='+f(seg[seg.length-1]);
+    if(seg.length>2) u+='&waypoints='+seg.slice(1,-1).map(f).join('%7C');
+    links.push(u);
+  }
+  return links;
+}
+
+/* ---------- メイン ---------- */
+function preOf(el){ return el.dataset.lat ? {lat:+el.dataset.lat, lon:+el.dataset.lon} : null; }
+$('go').onclick = async () => {
+  const msg = $('msg'); msg.className=''; msg.textContent='';
+  const startAddr = $('start').value.trim();
+  const depart = toSec($('depart').value);
+  const roundtrip = $('roundtrip').checked;
+  if(!startAddr || startAddr===DEFAULT_ADDR || depart==null){ msg.className='err'; msg.textContent='出発地の住所（町名・番地まで）と出発時刻を入力してください。'; return; }
+  const list = [...document.querySelectorAll('.visit')].map((el,i)=>({
+    name: el.querySelector('.f-name').value.trim() || String(i+1),
+    addr: el.querySelector('.f-addr').value.trim(),
+    earliest: toSec(el.querySelector('.f-from').value),
+    latest: toSec(el.querySelector('.f-to').value),
+    service: (parseInt(el.querySelector('.f-svc').value)||10)*60,
+    pre: preOf(el)
+  })).filter(v=>v.addr && v.addr!==DEFAULT_ADDR);
+  if(list.length<1){ msg.className='err'; msg.textContent='患家の住所を1件以上入力してください。'; return; }
+  for(const v of list){ if(v.earliest!=null && v.latest!=null && v.earliest>v.latest){ msg.className='err'; msg.textContent=`「${v.name}」の時間帯が逆転しています。`; return; } }
+
+  $('go').disabled = true;
+  try{
+    msg.textContent='住所を座標に変換中…';
+    const pts=[]; const all=[{addr:startAddr,name:'出発地',pre:preOf($('start'))},...list];
+    for(let i=0;i<all.length;i++){
+      const g = all[i].pre || parseCoords(all[i].addr) || await geocode(all[i].addr);
+      if(!g) throw new Error(`住所が見つかりません：「${all[i].name}」 ${all[i].addr}\n（丁目・番地まで、都道府県から入力すると改善します）`);
+      pts.push(g);
+    }
+    msg.textContent='所要時間を計算中…';
+    const dur = await osrmTable(pts);
+    msg.textContent='最適な順番を探索中…';
+    await new Promise(r=>setTimeout(r,30));
+    const fac = makeFac();
+    const {order, truncated} = optimize(dur, list, depart, roundtrip, fac);
+    const sch = schedule(dur, list, order, depart, roundtrip, fac);
+    msg.textContent='道順を取得中…';
+    const seq = [pts[0], ...order.map(k=>pts[k+1])]; if(roundtrip) seq.push(pts[0]);
+    const route = await osrmRoute(seq);
+
+    // 結果表示
+    const totalDrive = sch.rows.reduce((a,r)=>a+r.drive,0) + sch.back;
+    const lateCount = sch.rows.filter(r=>r.late>0).length;
+    $('summary').innerHTML = `運転 合計 ${fmtDur(totalDrive)}（約${(route.distance/1000).toFixed(1)} km）／ 終了予定 ${fmt(sch.finish)}`
+      + (lateCount?` <span class="late">／ 時間枠に間に合わない患家 ${lateCount}件</span>`:'');
+    let html = `<div class="stop"><div class="num">0</div><div><b>出発地</b> ${fmt(depart)} 発<div class="small">${esc(pts[0].title || startAddr)}</div></div></div>`;
+    sch.rows.forEach((r,i)=>{
+      const v=list[r.k];
+      html += `<div class="stop"><div class="num">${i+1}</div><div><b>${esc(v.name)}</b>　到着 ${fmt(r.arr)}`
+        + (r.wait?` <span class="wait">（${fmtDur(r.wait)}待機→${fmt(r.start)}開始）</span>`:'')
+        + (r.late?` <span class="late">（${fmt(v.latest)}までの指定に${fmtDur(r.late)}間に合わず）</span>`:'')
+        + `　〜 ${fmt(r.end)}<div class="small">移動 ${fmtDur(r.drive)}｜${esc(v.addr)}</div></div></div>`;
+    });
+    if(roundtrip) html += `<div class="stop"><div class="num">↩</div><div><b>帰着</b> ${fmt(sch.finish)}<div class="small">移動 ${fmtDur(sch.back)}</div></div></div>`;
+    $('list').innerHTML = html;
+    const links = gmapsLinks(seq, roundtrip);
+    $('links').innerHTML = '<div class="small">スマホのナビで開く（Googleマップ）</div>' + links.map((u,i)=>`<a class="link" href="${u}" target="_blank" rel="noopener">▶ Googleマップでナビ ${links.length>1?`(${i+1}/${links.length})`:''}</a>`).join('');
+    $('resCard').style.display='block';
+
+    // 地図
+    if(HAS_MAP){
+    layer.clearLayers();
+    const line = L.geoJSON(route.geometry,{style:{color:'#0f6e56',weight:5,opacity:.85}}).addTo(layer);
+    const mk=(p,txt,color)=>L.marker([p.lat,p.lon],{icon:L.divIcon({className:'',html:`<div style="background:${color};color:#fff;border-radius:50%;width:26px;height:26px;display:flex;align-items:center;justify-content:center;font-size:13px;border:2px solid #fff;box-shadow:0 1px 3px rgba(0,0,0,.4)">${txt}</div>`,iconSize:[26,26],iconAnchor:[13,13]})}).addTo(layer);
+    mk(pts[0],'S','#1c2733');
+    order.forEach((k,i)=>mk(pts[k+1],i+1, sch.rows[i].late?'#c0392b':'#0f6e56').bindPopup(esc(list[k].name)));
+    map.fitBounds(line.getBounds(),{padding:[20,20]});
+    }
+    msg.textContent = truncated ? '※探索を途中で打ち切りました（準最適解）。' : '完了';
+    $('resCard').scrollIntoView({behavior:'smooth'});
+  }catch(e){
+    msg.className='err'; msg.textContent = e.message || String(e);
+  }finally{ $('go').disabled=false; }
+};
+</script>
+</body>
+</html>
