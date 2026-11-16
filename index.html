@@ -7,7 +7,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-title" content="訪問ルート">
-<title>訪問診療 最短コース選定 v1.6.1</title>
+<title>訪問診療 最短コース選定 v1.7.0</title>
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
 <style>
 *{box-sizing:border-box}
@@ -78,6 +78,22 @@ a.link{display:block;margin:6px 0;color:#0b57d0}
 </header>
 <div id="nomap">地図の部品を読み込めませんでした（インターネット接続、またはファイルを開いたアプリの制限が原因の可能性があります）。「📍地図」と地図表示は使えません。Chrome/Safariなどのブラウザで開き直してください。住所の手入力での計算は可能です。</div>
 <main>
+<div class="card" id="savecard">
+  <h2>保存データ（名前をつけて保存・呼び出し）</h2>
+  <label>保存済みから選ぶ</label>
+  <div style="display:flex;gap:6px">
+    <select id="dsSel" style="flex:1;min-width:0;padding:8px;border:1px solid #c9d3dc;border-radius:6px;font-size:16px;min-height:44px;background:#fff"></select>
+    <button class="sub" id="dsLoad">読み込む</button>
+    <button class="sub" id="dsDel">削除</button>
+  </div>
+  <label style="margin-top:10px">いまの入力に名前をつけて保存</label>
+  <div style="display:flex;gap:6px">
+    <input type="text" id="dsName" maxlength="40" placeholder="例：月曜午後コース">
+    <button class="sub" id="dsSave" style="white-space:nowrap">保存</button>
+  </div>
+  <div id="dsMsg" class="small" style="margin-top:6px"></div>
+  <div class="small">この端末のブラウザ内にだけ保存されます（他の端末とは共有されません）。住所が残るので、共有端末では使わず、不要になったら削除してください。</div>
+</div>
 <div class="card">
   <h2>① 出発地・時刻</h2>
   <div class="row2">
@@ -137,10 +153,11 @@ a.link{display:block;margin:6px 0;color:#0b57d0}
 <script>
 /* ---------- 共通ユーティリティ ---------- */
 /* ===== バージョン管理：修正のたびにここを更新（履歴は先頭が最新） ===== */
-const VERSION = '1.6.1', VERSION_DATE = '2026-11-15';
+const VERSION = '1.7.0', VERSION_DATE = '2026-11-15';
 const DEFAULT_ADDR = '東京都練馬区';
 const DEFAULT_START = '東京都練馬区東大泉6-3-3';
 const CHANGELOG = [
+  ['1.7.0','2026-11-16','入力データに名前をつけて保存／保存済みを一覧から選んで呼び出し・削除（この端末のブラウザ内に保存）'],
   ['1.6.1','2026-11-16','iPad表示で時刻入力欄と滞在時間欄が重なる問題を修正'],
   ['1.6.0','2026-11-15','スマホ表示を最適化（入力時の自動拡大防止、ボタン拡大、2段レイアウト、ホーム画面追加対応）／ラベル文言を整理'],
   ['1.5.0','2026-11-15','患家ごとの個別リセット（クリア）ボタンを追加'],
@@ -249,6 +266,81 @@ function resetBtnOff(){
   clearTimeout(resetTimer); resetTimer = null;
   const b = $('reset'); b.textContent = '🔄 リセット（新しい入力を始める）'; b.style.background = ''; b.style.color = '';
 }
+
+/* ---------- 保存データ（localStorage） ---------- */
+const DS_KEY = 'houmonRoute.datasets.v1';
+function dsRead(){ try{ return JSON.parse(localStorage.getItem(DS_KEY)||'{}')||{}; }catch(_){ return {}; } }
+function dsWrite(o){ try{ localStorage.setItem(DS_KEY, JSON.stringify(o)); return true; }catch(_){ return false; } }
+function dsMsg(t, err){ const m=$('dsMsg'); m.textContent=t; m.className='small'+(err?' err':''); }
+function dsStamp(iso){ const d=new Date(iso); return (d.getMonth()+1)+'/'+d.getDate()+' '+String(d.getHours()).padStart(2,'0')+':'+String(d.getMinutes()).padStart(2,'0'); }
+function dsRefresh(select){
+  const all = dsRead(), names = Object.keys(all).sort((a,b)=>all[b].saved.localeCompare(all[a].saved));
+  const sel = $('dsSel'); sel.innerHTML = '';
+  if(!names.length){ sel.innerHTML = '<option value="">（保存データなし）</option>'; return; }
+  sel.innerHTML = '<option value="">― 選択してください ―</option>' + names.map(n=>`<option value="${esc(n)}">${esc(n)}（${dsStamp(all[n].saved)}）</option>`).join('');
+  if(select && all[select]) sel.value = select;
+}
+function dsCapture(){
+  const rows = [...document.querySelectorAll('.visit')].map(el=>({
+    addr: el.querySelector('.f-addr').value,
+    lat: el.dataset.lat ? +el.dataset.lat : null, lon: el.dataset.lon ? +el.dataset.lon : null,
+    from: el.querySelector('.f-from').value, to: el.querySelector('.f-to').value,
+    svc: parseInt(el.querySelector('.f-svc').value)||10
+  }));
+  return { v:1,
+    start:{ addr:$('start').value, lat:$('start').dataset.lat?+$('start').dataset.lat:null, lon:$('start').dataset.lon?+$('start').dataset.lon:null },
+    depart:$('depart').value, roundtrip:$('roundtrip').checked, usefac:$('usefac').checked,
+    facs:[...document.querySelectorAll('.fac')].map(e=>e.value), visits:rows };
+}
+function dsApply(d){
+  endPick();
+  $('start').value = d.start.addr; delete $('start').dataset.lat; delete $('start').dataset.lon;
+  if(d.start.lat!=null){ $('start').dataset.lat=d.start.lat; $('start').dataset.lon=d.start.lon; }
+  if(d.depart) $('depart').value = d.depart;
+  $('roundtrip').checked = !!d.roundtrip; $('usefac').checked = !!d.usefac;
+  document.querySelectorAll('.fac').forEach((e,i)=>{ if(d.facs && d.facs[i]!=null) e.value = d.facs[i]; });
+  $('visits').innerHTML = '';
+  (d.visits||[]).slice(0,MAXV).forEach(v=>{
+    addVisit({addr:v.addr, from:v.from, to:v.to, svc:v.svc});
+    const el = document.querySelector('#visits .visit:last-child');
+    if(v.lat!=null){ el.dataset.lat=v.lat; el.dataset.lon=v.lon; }
+  });
+  if(!document.querySelectorAll('.visit').length) for(let i=0;i<8;i++) addVisit();
+  // 古い結果は消す
+  $('resCard').style.display='none'; $('msg').textContent='';
+  if(HAS_MAP) layer.clearLayers();
+}
+let dsTimers = {};
+function dsTwoStep(btnId, armedText, action){
+  const b=$(btnId);
+  if(dsTimers[btnId]){ clearTimeout(dsTimers[btnId]); dsTimers[btnId]=null; b.textContent=b.dataset.orig; b.style.background=''; b.style.color=''; action(); return; }
+  b.dataset.orig = b.textContent; b.textContent = armedText; b.style.background='#fdecea'; b.style.color='#922';
+  dsTimers[btnId] = setTimeout(()=>{ dsTimers[btnId]=null; b.textContent=b.dataset.orig; b.style.background=''; b.style.color=''; }, 3000);
+}
+$('dsSave').onclick = () => {
+  const name = $('dsName').value.trim();
+  if(!name){ dsMsg('保存名を入力してください。', true); return; }
+  const all = dsRead(), doSave = () => {
+    all[name] = { saved:new Date().toISOString(), data:dsCapture() };
+    if(!dsWrite(all)){ dsMsg('保存できませんでした（ブラウザの保存機能が使えない状態です）。', true); return; }
+    dsRefresh(name); dsMsg(`「${name}」を保存しました。`);
+  };
+  if(all[name]) dsTwoStep('dsSave','同名あり：もう一度押すと上書き', doSave); else doSave();
+};
+$('dsLoad').onclick = () => {
+  const name = $('dsSel').value; if(!name){ dsMsg('読み込むデータを選んでください。', true); return; }
+  const rec = dsRead()[name]; if(!rec){ dsMsg('データが見つかりません。', true); dsRefresh(); return; }
+  try{ dsApply(rec.data); $('dsName').value = name; dsMsg(`「${name}」を読み込みました。そのまま計算できます。`); }
+  catch(e){ dsMsg('読み込みに失敗しました：'+e.message, true); }
+};
+$('dsDel').onclick = () => {
+  const name = $('dsSel').value; if(!name){ dsMsg('削除するデータを選んでください。', true); return; }
+  dsTwoStep('dsDel','もう一度押すと削除', ()=>{
+    const all = dsRead(); delete all[name];
+    if(dsWrite(all)){ dsRefresh(); dsMsg(`「${name}」を削除しました。`); } else dsMsg('削除できませんでした。', true);
+  });
+};
+dsRefresh();
 
 /* 住所欄：初期値のままフォーカスしたら末尾にカーソルを置く */
 function caretEnd(inp){ inp.addEventListener('focus',()=>setTimeout(()=>{ if(inp.value===DEFAULT_ADDR){const l=inp.value.length; try{inp.setSelectionRange(l,l);}catch(_){}} },0)); }
