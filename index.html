@@ -7,7 +7,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-title" content="訪問ルート">
-<title>訪問診療 最短コース選定 v1.7.0</title>
+<title>訪問診療 最短コース選定 v1.8.0</title>
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
 <style>
 *{box-sizing:border-box}
@@ -56,7 +56,6 @@ a.link{display:block;margin:6px 0;color:#0b57d0}
   .visit .top .pick,.visit .top .del{height:44px;font-size:14px}
   .visit .top .btns{grid-column:1 / -1;display:grid;grid-template-columns:1fr 1fr 56px;gap:6px}
   .visit .g{grid-template-columns:minmax(0,1fr) minmax(0,1fr)}
-  .visit .g > div:last-child{grid-column:1 / -1}
   button.main{padding:14px;font-size:17px}
   button.sub{min-height:44px}
   .pick{min-height:44px}
@@ -118,7 +117,7 @@ a.link{display:block;margin:6px 0;color:#0b57d0}
 
 <div class="card">
   <h2>② 患家（8〜10件程度・最大12件）</h2>
-  <div class="small" style="margin-bottom:8px">患家の名前は A, B, C… が自動で付きます（個人名は入力不要）。住所は入力するか、「📍地図」を押して地図上の家をタップ（Googleマップの「緯度,経度」や長いURLの貼り付けも可）。<br>患家の都合は、あれば入力：例）14時以降なら在宅 →「以降」に14:00／16時までに来てほしい →「までに」に16:00。空欄なら指定なし。</div>
+  <div class="small" style="margin-bottom:8px">患家の名前は A, B, C… が自動で付きます（個人名は入力不要）。住所は入力するか、「📍地図」を押して地図上の家をタップ（Googleマップの「緯度,経度」や長いURLの貼り付けも可）。<br>患家の都合は、あれば入力：例）14時以降なら在宅 →「以降」に14:00／16時までに来てほしい →「までに」に16:00。空欄なら指定なし。<br>「◯番目に訪問」は、順番を自分で決めたい患家だけ入力（例：Bを最初に→1）。空欄の患家は、残りの順番の中で最短になるよう自動で決まります。</div>
   <div id="visits"></div>
   <div style="display:flex;gap:8px">
     <button class="sub" id="add">＋ 患家を追加</button>
@@ -153,10 +152,11 @@ a.link{display:block;margin:6px 0;color:#0b57d0}
 <script>
 /* ---------- 共通ユーティリティ ---------- */
 /* ===== バージョン管理：修正のたびにここを更新（履歴は先頭が最新） ===== */
-const VERSION = '1.7.0', VERSION_DATE = '2026-11-15';
+const VERSION = '1.8.0', VERSION_DATE = '2026-11-15';
 const DEFAULT_ADDR = '東京都練馬区';
 const DEFAULT_START = '東京都練馬区東大泉6-3-3';
 const CHANGELOG = [
+  ['1.8.0','2026-11-19','患家ごとに「◯番目に訪問」を任意指定できる機能を追加（指定なしの患家は最短になるよう自動で配置）'],
   ['1.7.0','2026-11-16','入力データに名前をつけて保存／保存済みを一覧から選んで呼び出し・削除（この端末のブラウザ内に保存）'],
   ['1.6.1','2026-11-16','iPad表示で時刻入力欄と滞在時間欄が重なる問題を修正'],
   ['1.6.0','2026-11-15','スマホ表示を最適化（入力時の自動拡大防止、ボタン拡大、2段レイアウト、ホーム画面追加対応）／ラベル文言を整理'],
@@ -182,10 +182,11 @@ const fmtDur = s => { const m=Math.round(s/60); return m>=60 ? Math.floor(m/60)+
    dur[i][j]: 秒 / 0=出発地, 1..n=患家
    visits[k] = {earliest, latest, service}（秒）
    遅刻は 1秒につきペナルティ LATE_W を加算（遅刻ゼロの解があればそれが優先される） */
-function optimize(dur, visits, depart, roundtrip, fac=()=>1, nodeLimit=3000000){
+function optimize(dur, visits, depart, roundtrip, fac=()=>1, nodeLimit=3000000, fixed=[]){
   const n = visits.length, LATE_W = 20;
   let best = {cost:Infinity, order:null}, nodes = 0, truncated = false;
   const used = new Array(n).fill(false), path = [];
+  const fixedSet = new Set(fixed.filter(x=>x!=null));
     function dfs(cur, t, pen, depth){
     if(++nodes > nodeLimit){ truncated = true; return; }
     if(depth === n){
@@ -198,7 +199,8 @@ function optimize(dur, visits, depart, roundtrip, fac=()=>1, nodeLimit=3000000){
     if((t - depart) + pen >= best.cost) return;
     // 近い順に探索
     const cand = [];
-    for(let k=0;k<n;k++) if(!used[k]) cand.push(k);
+    if(fixed[depth] != null){ cand.push(fixed[depth]); }
+    else for(let k=0;k<n;k++) if(!used[k] && !fixedSet.has(k)) cand.push(k);
     cand.sort((a,b)=>dur[cur][a+1]-dur[cur][b+1]);
     for(const k of cand){
       const v = visits[k];
@@ -285,7 +287,8 @@ function dsCapture(){
     addr: el.querySelector('.f-addr').value,
     lat: el.dataset.lat ? +el.dataset.lat : null, lon: el.dataset.lon ? +el.dataset.lon : null,
     from: el.querySelector('.f-from').value, to: el.querySelector('.f-to').value,
-    svc: parseInt(el.querySelector('.f-svc').value)||10
+    svc: parseInt(el.querySelector('.f-svc').value)||10,
+    ord: el.querySelector('.f-ord').value
   }));
   return { v:1,
     start:{ addr:$('start').value, lat:$('start').dataset.lat?+$('start').dataset.lat:null, lon:$('start').dataset.lon?+$('start').dataset.lon:null },
@@ -301,7 +304,7 @@ function dsApply(d){
   document.querySelectorAll('.fac').forEach((e,i)=>{ if(d.facs && d.facs[i]!=null) e.value = d.facs[i]; });
   $('visits').innerHTML = '';
   (d.visits||[]).slice(0,MAXV).forEach(v=>{
-    addVisit({addr:v.addr, from:v.from, to:v.to, svc:v.svc});
+    addVisit({addr:v.addr, from:v.from, to:v.to, svc:v.svc, ord:v.ord});
     const el = document.querySelector('#visits .visit:last-child');
     if(v.lat!=null){ el.dataset.lat=v.lat; el.dataset.lon=v.lon; }
   });
@@ -371,6 +374,7 @@ function addVisit(d={}){
      <div><label>この時刻以降に訪問（任意）</label><input type="time" class="f-from" value="${d.from||''}"></div>
      <div><label>この時刻までに到着（任意）</label><input type="time" class="f-to" value="${d.to||''}"></div>
      <div><label>滞在時間(分)</label><input type="number" class="f-svc" min="1" max="180" value="${d.svc||10}"></div>
+     <div><label>◯番目に訪問（任意）</label><input type="number" class="f-ord" min="1" max="12" inputmode="numeric" placeholder="自動" value="${d.ord||''}"></div>
    </div>`;
   div.querySelector('.del').onclick = () => { div.remove(); relabel(); };
   const inp = div.querySelector('.f-addr');
@@ -379,7 +383,7 @@ function addVisit(d={}){
   div.querySelector('.clr').onclick = () => {
     inp.value = DEFAULT_ADDR; delete div.dataset.lat; delete div.dataset.lon;
     div.querySelector('.f-from').value = ''; div.querySelector('.f-to').value = '';
-    div.querySelector('.f-svc').value = 10;
+    div.querySelector('.f-svc').value = 10; div.querySelector('.f-ord').value = '';
     if(pickTarget && pickTarget.holder === div) endPick();
   };
   div.querySelector('.pick').onclick = () => startPick(inp, div, div.querySelector('.f-name').value || '患家');
@@ -499,10 +503,20 @@ $('go').onclick = async () => {
     earliest: toSec(el.querySelector('.f-from').value),
     latest: toSec(el.querySelector('.f-to').value),
     service: (parseInt(el.querySelector('.f-svc').value)||10)*60,
+    ord: el.querySelector('.f-ord').value.trim()==='' ? null : Number(el.querySelector('.f-ord').value),
     pre: preOf(el)
   })).filter(v=>v.addr && v.addr!==DEFAULT_ADDR);
   if(list.length<1){ msg.className='err'; msg.textContent='患家の住所を1件以上入力してください。'; return; }
   for(const v of list){ if(v.earliest!=null && v.latest!=null && v.earliest>v.latest){ msg.className='err'; msg.textContent=`「${v.name}」の時間帯が逆転しています。`; return; } }
+
+  // 訪問順の指定チェック
+  const fixed = new Array(list.length).fill(null);
+  for(let i=0;i<list.length;i++){
+    const o = list[i].ord; if(o==null) continue;
+    if(!Number.isInteger(o) || o<1 || o>list.length){ msg.className='err'; msg.textContent=`「${list[i].name}」の訪問順は 1〜${list.length} の整数で指定してください（住所を入力した患家は${list.length}件です）。`; return; }
+    if(fixed[o-1]!=null){ msg.className='err'; msg.textContent=`「${list[fixed[o-1]].name}」と「${list[i].name}」が同じ ${o} 番目に指定されています。`; return; }
+    fixed[o-1] = i;
+  }
 
   $('go').disabled = true;
   try{
@@ -518,7 +532,7 @@ $('go').onclick = async () => {
     msg.textContent='最適な順番を探索中…';
     await new Promise(r=>setTimeout(r,30));
     const fac = makeFac();
-    const {order, truncated} = optimize(dur, list, depart, roundtrip, fac);
+    const {order, truncated} = optimize(dur, list, depart, roundtrip, fac, 3000000, fixed);
     const sch = schedule(dur, list, order, depart, roundtrip, fac);
     msg.textContent='道順を取得中…';
     const seq = [pts[0], ...order.map(k=>pts[k+1])]; if(roundtrip) seq.push(pts[0]);
@@ -532,7 +546,7 @@ $('go').onclick = async () => {
     let html = `<div class="stop"><div class="num">0</div><div><b>出発地</b> ${fmt(depart)} 発<div class="small">${esc(pts[0].title || startAddr)}</div></div></div>`;
     sch.rows.forEach((r,i)=>{
       const v=list[r.k];
-      html += `<div class="stop"><div class="num">${i+1}</div><div><b>${esc(v.name)}</b>　到着 ${fmt(r.arr)}`
+      html += `<div class="stop"><div class="num">${i+1}</div><div><b>${esc(v.name)}</b>${v.ord?' <span class="small">📌指定</span>':''}　到着 ${fmt(r.arr)}`
         + (r.wait?` <span class="wait">（${fmtDur(r.wait)}待機→${fmt(r.start)}開始）</span>`:'')
         + (r.late?` <span class="late">（${fmt(v.latest)}までの指定に${fmtDur(r.late)}間に合わず）</span>`:'')
         + `　〜 ${fmt(r.end)}<div class="small">移動 ${fmtDur(r.drive)}｜${esc(v.addr)}</div></div></div>`;
