@@ -7,7 +7,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-title" content="訪問ルート">
-<title>訪問診療 最短コース選定 v1.11.0</title>
+<title>訪問診療 最短コース選定 v1.11.1</title>
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
 <style>
 *{box-sizing:border-box}
@@ -178,10 +178,11 @@ a.link{display:block;margin:6px 0;color:#0b57d0}
 <script>
 /* ---------- 共通ユーティリティ ---------- */
 /* ===== バージョン管理：修正のたびにここを更新（履歴は先頭が最新） ===== */
-const VERSION = '1.11.0', VERSION_DATE = '2026-11-15';
+const VERSION = '1.11.1', VERSION_DATE = '2026-11-15';
 const DEFAULT_ADDR = '東京都練馬区';
 const DEFAULT_START = '東京都練馬区東大泉6-3-3';
 const CHANGELOG = [
+  ['1.11.1','2026-11-20','音声入力が2回目以降に不安定になる問題を修正（前回の認識の残りイベントを無視／前回終了から少し間を空けて開始／終了後にマイクを確実に解放）'],
   ['1.11.0','2026-11-20','アプリ内の音声入力を復活（各住所欄・出発地）／音声で計算・印刷を指示（1回／待機モード）／固まり対策（準備中表示・自動停止・再タップで停止）'],
   ['1.10.1','2026-11-20','印刷時、地図の左右が切れる問題を修正（印刷用に地図の大きさを固定し、余白を付けて全体を表示）'],
   ['1.10.0','2026-11-20','印刷：順番表を1ページ目、地図を2ページ目に分割／アプリ内の音声ボタンを廃止（キーボードのマイク入力を推奨）し、話した住所は入力欄を離れると自動で整形'],
@@ -411,47 +412,61 @@ $('start').addEventListener('change', ()=>normalizeField($('start')));
 
 /* ---------- 音声入力（Web Speech API）---------- */
 const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
-let LISTEN_MS = 15000, HARD_MS = 25000, activeRec = null;
+let LISTEN_MS = 15000, HARD_MS = 25000, GAP_MS = 600, activeRec = null, lastVoiceEnd = 0;
+function voiceGap(){ return Math.max(0, GAP_MS - (Date.now() - lastVoiceEnd)); }   // 前回の認識が終わってから少し間を空ける
 function listen(btn, onText, onFail){
   if(!SR){ toast('この端末・ブラウザは音声認識に対応していません。住所欄をタップして、キーボードのマイク🎤をお使いください。'); if(onFail) onFail(); return; }
   if(standbyOn) stopStandby('音声待機をオフにしました（音声入力を優先します）');
-  // 聞き取り中にもう一度押したら停止
+  // 聞き取り中（準備中を含む）にもう一度押したら停止
   if(activeRec){ const a = activeRec; a.stop(); if(a.btn === btn) return; }
+  if(!btn.dataset.orig) btn.dataset.orig = btn.textContent;     // 元のラベルは最初の1回だけ記録
+  const orig = btn.dataset.orig;
   const rec = new SR(); rec.lang='ja-JP'; rec.continuous=false; rec.interimResults=true; rec.maxAlternatives=1;
-  const orig = btn.textContent; let text='', committed=false, failed=false, started=false, timer=null, hard=null, prep=null;
-  const reset = ()=>{ clearTimeout(timer); clearTimeout(hard); clearTimeout(prep); btn.textContent=orig; btn.classList.remove('listening'); if(activeRec && activeRec.rec===rec) activeRec=null; };
+  let text='', committed=false, failed=false, started=false, dead=false, rstarted=false, timer=null, hard=null, prep=null;
+  const reset = ()=>{   // この回の終了処理（1回だけ）。以後、この回のイベントはすべて無視する
+    if(dead) return; dead=true; lastVoiceEnd=Date.now();
+    clearTimeout(timer); clearTimeout(hard); clearTimeout(prep);
+    btn.textContent=orig; btn.classList.remove('listening');
+    if(activeRec && activeRec.rec===rec) activeRec=null;
+    setTimeout(()=>{ try{ rec.abort(); }catch(_){} }, 300);      // マイクを確実に解放
+  };
   const commit = ()=>{
     if(committed) return; committed=true;
     const t = text.trim();
     if(t){ try{ onText(t); }catch(err){ toast('認識結果の処理に失敗：'+err.message); } }
     else if(!failed){ toast(started ? '音声が聞き取れませんでした。もう一度お試しください。' : '音声認識が始まりませんでした。住所欄をタップして、キーボードのマイク🎤をお使いください。'); if(onFail) onFail(); }
   };
-  const stop = ()=>{            // 手動停止・時間切れ共通：結果を確定してボタンを必ず元に戻す
+  const stop = ()=>{   // 手動停止・時間切れ共通：結果を確定してボタンを必ず元に戻す
+    if(dead) return;
+    if(!rstarted){ committed=true; reset(); return; }   // まだ開始前なら取り消すだけ
     try{ rec.stop(); }catch(_){}
-    setTimeout(()=>{ commit(); reset(); try{ rec.abort(); }catch(_){} }, 700);
+    setTimeout(()=>{ if(dead) return; commit(); reset(); }, 700);
   };
   btn.textContent='🎙準備中…'; btn.classList.add('listening');
-  rec.onstart = ()=>{ started=true; clearTimeout(prep); clearTimeout(hard); btn.textContent='🎙停止'; toast('どうぞ話してください（もう一度押すと停止）'); timer=setTimeout(stop, LISTEN_MS); };
+  rec.onstart = ()=>{ if(dead) return; started=true; clearTimeout(prep); clearTimeout(hard); btn.textContent='🎙停止'; toast('どうぞ話してください（もう一度押すと停止）'); timer=setTimeout(stop, LISTEN_MS); };
   rec.onresult = e => {
-    started=true; text='';
+    if(dead) return; started=true; text='';
     for(let i=0;i<e.results.length;i++) text += e.results[i][0].transcript;
-    if(e.results[e.results.length-1].isFinal){ commit(); reset(); try{ rec.stop(); }catch(_){} }
+    if(e.results[e.results.length-1].isFinal){ commit(); try{ rec.stop(); }catch(_){} reset(); }
   };
-  rec.onspeechend = ()=>{ try{ rec.stop(); }catch(_){} };
+  rec.onspeechend = ()=>{ if(dead) return; try{ rec.stop(); }catch(_){} };
   rec.onerror = e => {
-    if(e.error==='aborted') return;
+    if(dead || e.error==='aborted') return;
     failed=true; reset();
     toast(e.error==='not-allowed' ? 'マイクの使用が許可されていません（Safari/Chromeのサイト設定、または端末の「設定」でマイクと音声認識を許可してください）。'
       : e.error==='service-not-allowed' ? '音声認識が使えません（端末の音声入力／Siriがオフの可能性があります）。キーボードのマイク🎤をお使いください。'
       : e.error==='no-speech' ? '音声が聞き取れませんでした。' : '音声認識エラー：'+e.error);
     if(onFail) onFail();
   };
-  rec.onend = ()=>{ commit(); reset(); };
-  prep = setTimeout(()=>toast('まだ始まりません。マイク許可の画面が出ていないか確認してください。出ていなければ、もう一度押すか、キーボードのマイク🎤をお使いください。'), 6000);
-  hard = setTimeout(stop, HARD_MS);
+  rec.onend = ()=>{ if(dead) return; commit(); reset(); };
+  prep = setTimeout(()=>{ if(!dead) toast('まだ始まりません。マイク許可の画面が出ていないか確認してください。出ていなければ、もう一度押すか、キーボードのマイク🎤をお使いください。'); }, 6000 + voiceGap());
+  hard = setTimeout(stop, HARD_MS + voiceGap());
   activeRec = {rec, btn, stop};
-  try{ rec.start(); }
-  catch(err){ reset(); toast('音声認識を開始できませんでした：'+err.message); if(onFail) onFail(); }
+  setTimeout(()=>{
+    if(dead) return;
+    try{ rstarted=true; rec.start(); }
+    catch(err){ failed=true; reset(); toast('音声認識を開始できませんでした：'+err.message); if(onFail) onFail(); }
+  }, voiceGap());
 }
 function startVoiceAddr(inp, holder, btn){
   listen(btn, text=>{
@@ -475,7 +490,7 @@ $('voiceCmd').onclick = e => listen(e.currentTarget, text=>{ if(!runCmd(text)) t
 let standbyOn=false, standbyRec=null, standbyTimer=null, standbyRestarts=[], lastCmdAt=0, STANDBY_MS=300000;
 function standbyUI(){ const b=$('standbyBtn'); b.textContent = standbyOn ? '🎧 待機中…タップで停止' : '🎧 音声待機：オフ'; b.classList.toggle('standby', standbyOn); }
 function stopStandby(msg){
-  standbyOn=false; clearTimeout(standbyTimer); standbyTimer=null;
+  standbyOn=false; clearTimeout(standbyTimer); standbyTimer=null; lastVoiceEnd=Date.now();
   if(standbyRec){ const r=standbyRec; standbyRec=null; try{ r.onend=null; r.stop(); }catch(_){} try{ r.abort(); }catch(_){} }
   standbyUI(); if(msg) toast(msg);
 }
@@ -509,7 +524,7 @@ $('standbyBtn').onclick = () => {
   standbyOn=true; standbyRestarts=[]; standbyUI();
   standbyTimer = setTimeout(()=>stopStandby('音声待機を自動でオフにしました（約5分）。'), STANDBY_MS);
   toast('音声待機をオンにしました。「計算」「印刷」と話してください。許可を求められたら「許可」を押してください。');
-  runStandby();
+  setTimeout(runStandby, voiceGap());
 };
 
 /* ---------- 印刷 ---------- */
