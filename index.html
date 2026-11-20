@@ -7,7 +7,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-title" content="訪問ルート">
-<title>訪問診療 最短コース選定 v1.10.0</title>
+<title>訪問診療 最短コース選定 v1.10.1</title>
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
 <style>
 *{box-sizing:border-box}
@@ -69,7 +69,8 @@ a.link{display:block;margin:6px 0;color:#0b57d0}
 #nomap{display:none;background:#fdecea;border:1px solid #f1b0a8;border-radius:8px;padding:8px;margin:8px 12px;font-size:13px;color:#922}
 #toast{position:fixed;left:50%;bottom:24px;transform:translateX(-50%);background:#1c2733;color:#fff;padding:10px 14px;border-radius:10px;font-size:14px;z-index:3000;max-width:90vw;display:none}
 #printHead,#mapTitle{display:none}
-.pre-print #map{height:225mm !important}
+.pre-print #map{width:700px !important;height:850px !important;margin:0 auto}
+.pre-print #mapcard{padding:0 !important}
 .listening{background:#fdecea !important;color:#922 !important}
 @media print{
   @page{size:A4;margin:10mm}
@@ -82,7 +83,7 @@ a.link{display:block;margin:6px 0;color:#0b57d0}
   #links,#printBtn,#pickbar{display:none !important}
   #mapcard{break-before:page;page-break-before:always}
   #mapTitle{display:block !important;font-size:11pt;margin-bottom:3mm}
-  #map{height:225mm !important;border-radius:0;border:1px solid #999}
+  #map{width:700px !important;height:850px !important;margin:0 auto !important;border-radius:0;border:1px solid #999}
   .stop{break-inside:avoid}
 }
 #pickbar{display:none;background:#fff3cd;border:1px solid #f0d98a;border-radius:8px;padding:8px;margin-bottom:8px;font-size:14px}
@@ -174,10 +175,11 @@ a.link{display:block;margin:6px 0;color:#0b57d0}
 <script>
 /* ---------- 共通ユーティリティ ---------- */
 /* ===== バージョン管理：修正のたびにここを更新（履歴は先頭が最新） ===== */
-const VERSION = '1.10.0', VERSION_DATE = '2026-11-15';
+const VERSION = '1.10.1', VERSION_DATE = '2026-11-15';
 const DEFAULT_ADDR = '東京都練馬区';
 const DEFAULT_START = '東京都練馬区東大泉6-3-3';
 const CHANGELOG = [
+  ['1.10.1','2026-11-20','印刷時、地図の左右が切れる問題を修正（印刷用に地図の大きさを固定し、余白を付けて全体を表示）'],
   ['1.10.0','2026-11-20','印刷：順番表を1ページ目、地図を2ページ目に分割／アプリ内の音声ボタンを廃止（キーボードのマイク入力を推奨）し、話した住所は入力欄を離れると自動で整形'],
   ['1.9.1','2026-11-20','音声入力が「聞いています」のまま戻らない問題を修正（再タップで停止／時間切れで自動停止／途中結果の確定／失敗時はキーボード入力へ誘導）'],
   ['1.9.0','2026-11-20','結果（順番表＋地図）の印刷／住所の音声入力／音声コマンド（計算・印刷）を追加'],
@@ -408,11 +410,11 @@ let lastBounds = null;
 function printRoute(){
   if($('resCard').style.display==='none'){ toast('先に「最短コースを計算する」を押してください。'); return; }
   document.body.classList.add('pre-print');
-  if(HAS_MAP){ map.invalidateSize(); if(lastBounds) map.fitBounds(lastBounds,{padding:[20,20]}); }
-  setTimeout(()=>{ window.print(); }, 900);
+  if(HAS_MAP){ map.invalidateSize(); if(lastBounds) map.fitBounds(lastBounds,{padding:[60,60],animate:false}); }
+  setTimeout(()=>{ window.print(); }, 1300);
 }
 window.addEventListener('afterprint', ()=>{ document.body.classList.remove('pre-print'); if(HAS_MAP) setTimeout(()=>map.invalidateSize(),100); });
-window.addEventListener('beforeprint', ()=>{ if(HAS_MAP){ map.invalidateSize(); if(lastBounds) map.fitBounds(lastBounds,{padding:[20,20]}); } });
+window.addEventListener('beforeprint', ()=>{ if(HAS_MAP){ map.invalidateSize(); if(lastBounds) map.fitBounds(lastBounds,{padding:[60,60],animate:false}); } });
 $('printBtn').onclick = printRoute;
 
 /* 住所欄：初期値のままフォーカスしたら末尾にカーソルを置く */
