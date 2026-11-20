@@ -7,7 +7,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-title" content="訪問ルート">
-<title>訪問診療 最短コース選定 v1.9.0</title>
+<title>訪問診療 最短コース選定 v1.9.1</title>
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
 <style>
 *{box-sizing:border-box}
@@ -173,10 +173,11 @@ a.link{display:block;margin:6px 0;color:#0b57d0}
 <script>
 /* ---------- 共通ユーティリティ ---------- */
 /* ===== バージョン管理：修正のたびにここを更新（履歴は先頭が最新） ===== */
-const VERSION = '1.9.0', VERSION_DATE = '2026-11-15';
+const VERSION = '1.9.1', VERSION_DATE = '2026-11-15';
 const DEFAULT_ADDR = '東京都練馬区';
 const DEFAULT_START = '東京都練馬区東大泉6-3-3';
 const CHANGELOG = [
+  ['1.9.1','2026-11-20','音声入力が「聞いています」のまま戻らない問題を修正（再タップで停止／時間切れで自動停止／途中結果の確定／失敗時はキーボード入力へ誘導）'],
   ['1.9.0','2026-11-20','結果（順番表＋地図）の印刷／住所の音声入力／音声コマンド（計算・印刷）を追加'],
   ['1.8.0','2026-11-19','患家ごとに「◯番目に訪問」を任意指定できる機能を追加（指定なしの患家は最短になるよう自動で配置）'],
   ['1.7.0','2026-11-16','入力データに名前をつけて保存／保存済みを一覧から選んで呼び出し・削除（この端末のブラウザ内に保存）'],
@@ -392,22 +393,50 @@ function normalizeAddr(t){
   if(/^[^\d都道府県]{1,5}[区市]/.test(t)) return '東京都'+t;
   return DEFAULT_ADDR + t;
 }
-function listen(btn, onText){
-  if(!SR){ toast('この端末・ブラウザは音声認識に対応していません。キーボードのマイク🎤で音声入力できます。'); return; }
-  const rec = new SR(); rec.lang='ja-JP'; rec.interimResults=false; rec.maxAlternatives=1;
-  const orig = btn.textContent; btn.textContent='🎙 聞いています…'; btn.classList.add('listening');
-  const done = ()=>{ btn.textContent=orig; btn.classList.remove('listening'); };
-  rec.onresult = e => { try{ onText(e.results[0][0].transcript); }catch(err){ toast('認識結果の処理に失敗：'+err.message); } };
-  rec.onerror = e => { done(); toast(e.error==='not-allowed'||e.error==='service-not-allowed' ? 'マイクの使用が許可されていません（ブラウザ/端末の設定を確認してください）。' : e.error==='no-speech' ? '音声が聞き取れませんでした。' : '音声認識エラー：'+e.error); };
-  rec.onend = done;
-  try{ rec.start(); }catch(err){ done(); toast('音声認識を開始できませんでした：'+err.message); }
+let LISTEN_MS = 15000, activeRec = null;
+function listen(btn, onText, onFail){
+  if(!SR){ toast('この端末・ブラウザは音声認識に対応していません。キーボードのマイク🎤で音声入力できます。'); if(onFail) onFail(); return; }
+  // 聞き取り中にもう一度押したら停止（別のボタンなら前の分を止めて新しく開始）
+  if(activeRec){ const a = activeRec; a.stop(); if(a.btn === btn) return; }
+  const rec = new SR(); rec.lang='ja-JP'; rec.continuous=false; rec.interimResults=true; rec.maxAlternatives=1;
+  const orig = btn.textContent; let text='', committed=false, failed=false, timer=null;
+  const reset = ()=>{ clearTimeout(timer); btn.textContent=orig; btn.classList.remove('listening'); if(activeRec && activeRec.rec===rec) activeRec=null; };
+  const commit = ()=>{
+    if(committed) return; committed=true;
+    const t = text.trim();
+    if(t){ try{ onText(t); }catch(err){ toast('認識結果の処理に失敗：'+err.message); } }
+    else if(!failed){ toast('音声が聞き取れませんでした。キーボードのマイク🎤でも入力できます。'); if(onFail) onFail(); }
+  };
+  const stop = ()=>{            // 手動停止・時間切れ共通：結果を確定してボタンを必ず元に戻す
+    try{ rec.stop(); }catch(_){}
+    setTimeout(()=>{ commit(); reset(); try{ rec.abort(); }catch(_){} }, 700);
+  };
+  btn.textContent='🎙停止'; btn.classList.add('listening');
+  rec.onresult = e => {
+    text=''; for(let i=0;i<e.results.length;i++) text += e.results[i][0].transcript;
+    if(e.results[e.results.length-1].isFinal){ commit(); reset(); try{ rec.stop(); }catch(_){} }
+  };
+  rec.onspeechend = ()=>{ try{ rec.stop(); }catch(_){} };
+  rec.onerror = e => {
+    if(e.error==='aborted') return;
+    failed=true; reset();
+    toast(e.error==='not-allowed' ? 'マイクの使用が許可されていません（Safari/Chromeのサイト設定、または端末の「設定」でマイクと音声認識を許可してください）。'
+      : e.error==='service-not-allowed' ? '音声認識が使えません（端末の音声入力／Siriがオフの可能性があります）。キーボードのマイク🎤をお使いください。'
+      : e.error==='no-speech' ? '音声が聞き取れませんでした。' : '音声認識エラー：'+e.error);
+    if(onFail) onFail();
+  };
+  rec.onend = ()=>{ commit(); reset(); };
+  timer = setTimeout(stop, LISTEN_MS);
+  activeRec = {rec, btn, stop};
+  try{ rec.start(); toast('聞いています…話してください（許可を求められたら「許可」。もう一度押すと停止）'); }
+  catch(err){ reset(); toast('音声認識を開始できませんでした：'+err.message); if(onFail) onFail(); }
 }
 function startVoiceAddr(inp, holder, btn){
   listen(btn, text=>{
     const a = normalizeAddr(text);
     inp.value = a; delete holder.dataset.lat; delete holder.dataset.lon;
-    toast('入力：'+a);
-  });
+    toast('入力：'+a+'（内容を確認してください）');
+  }, ()=>{ try{ inp.focus(); }catch(_){} });
 }
 $('startMic').onclick = e => startVoiceAddr($('start'), $('start'), e.currentTarget);
 /* 音声コマンド */
