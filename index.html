@@ -7,7 +7,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-title" content="訪問ルート">
-<title>訪問診療 最短コース選定 v1.10.1</title>
+<title>訪問診療 最短コース選定 v1.11.0</title>
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
 <style>
 *{box-sizing:border-box}
@@ -23,7 +23,7 @@ input[type=text],input[type=time],input[type=number]{width:100%;padding:8px;bord
 .row2{display:grid;grid-template-columns:2fr 1fr;gap:8px}
 .visit{border:1px solid #e1e7ec;border-radius:8px;padding:8px;margin-bottom:8px;position:relative}
 .visit .g{display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:6px;margin-top:6px}
-.visit .top{display:grid;grid-template-columns:80px 1fr auto auto 32px;gap:6px;align-items:end}
+.visit .top{display:grid;grid-template-columns:80px 1fr auto auto auto 32px;gap:6px;align-items:end}
 .btns{display:contents}
 .visit .g > div,.visit .top > div{min-width:0}
 input[type=time],input[type=number]{min-width:0;max-width:100%;-webkit-appearance:none;appearance:none;display:block}
@@ -54,7 +54,7 @@ a.link{display:block;margin:6px 0;color:#0b57d0}
   .row2{grid-template-columns:1fr}
   .visit .top{grid-template-columns:52px 1fr;row-gap:6px}
   .visit .top .pick,.visit .top .del{height:44px;font-size:14px}
-  .visit .top .btns{grid-column:1 / -1;display:grid;grid-template-columns:1fr 1fr 52px;gap:6px}
+  .visit .top .btns{grid-column:1 / -1;display:grid;grid-template-columns:1fr 1fr 1fr 52px;gap:6px}
   .visit .g{grid-template-columns:minmax(0,1fr) minmax(0,1fr)}
   button.main{padding:14px;font-size:17px}
   button.sub{min-height:44px}
@@ -71,6 +71,7 @@ a.link{display:block;margin:6px 0;color:#0b57d0}
 #printHead,#mapTitle{display:none}
 .pre-print #map{width:700px !important;height:850px !important;margin:0 auto}
 .pre-print #mapcard{padding:0 !important}
+.standby{background:#e3f4ec !important;color:#0b5c46 !important;outline:2px solid #0f6e56}
 .listening{background:#fdecea !important;color:#922 !important}
 @media print{
   @page{size:A4;margin:10mm}
@@ -116,7 +117,7 @@ a.link{display:block;margin:6px 0;color:#0b57d0}
 <div class="card">
   <h2>① 出発地・時刻</h2>
   <div class="row2">
-    <div><label>出発地の住所（初期値：大泉生協病院）</label><div style="display:flex;gap:6px"><input type="text" id="start" value="東京都練馬区東大泉6-3-3" placeholder="例：東京都練馬区東大泉○-○-○"><button class="pick" id="startPick">📍地図</button></div></div>
+    <div><label>出発地の住所（初期値：大泉生協病院）</label><div style="display:flex;gap:6px"><input type="text" id="start" value="東京都練馬区東大泉6-3-3" placeholder="例：東京都練馬区東大泉○-○-○"><button class="pick" id="startPick">📍地図</button><button class="pick mic" id="startMic" title="音声で住所を入力">🎤</button></div></div>
     <div><label>出発時刻</label><input type="time" id="depart" value="13:30"></div>
   </div>
   <div style="margin-top:8px"><label><input type="checkbox" id="roundtrip" checked> 最後に出発地へ戻る</label></div>
@@ -137,7 +138,7 @@ a.link{display:block;margin:6px 0;color:#0b57d0}
 
 <div class="card">
   <h2>② 患家（8〜10件程度・最大12件）</h2>
-  <div class="small" style="margin-bottom:8px">患家の名前は A, B, C… が自動で付きます（個人名は入力不要）。住所は入力するか、「📍地図」を押して地図上の家をタップ。住所欄をタップしてキーボードのマイク🎤で話して入力もできます（「六の三の三」→「6-3-3」のように、欄を離れると自動で整えます）。Googleマップの「緯度,経度」や長いURLの貼り付けも可。<br>患家の都合は、あれば入力：例）14時以降なら在宅 →「以降」に14:00／16時までに来てほしい →「までに」に16:00。空欄なら指定なし。<br>「◯番目に訪問」は、順番を自分で決めたい患家だけ入力（例：Bを最初に→1）。空欄の患家は、残りの順番の中で最短になるよう自動で決まります。</div>
+  <div class="small" style="margin-bottom:8px">患家の名前は A, B, C… が自動で付きます（個人名は入力不要）。住所は入力するか、「📍地図」を押して地図上の家をタップ。「🎤音声」で話して入力もできます（動かない端末では、住所欄をタップしてキーボードのマイク🎤が使えます。「六の三の三」→「6-3-3」のように自動で整えます）。Googleマップの「緯度,経度」や長いURLの貼り付けも可。<br>患家の都合は、あれば入力：例）14時以降なら在宅 →「以降」に14:00／16時までに来てほしい →「までに」に16:00。空欄なら指定なし。<br>「◯番目に訪問」は、順番を自分で決めたい患家だけ入力（例：Bを最初に→1）。空欄の患家は、残りの順番の中で最短になるよう自動で決まります。</div>
   <div id="visits"></div>
   <div style="display:flex;gap:8px">
     <button class="sub" id="add">＋ 患家を追加</button>
@@ -147,6 +148,8 @@ a.link{display:block;margin:6px 0;color:#0b57d0}
 
 <div class="card">
   <button class="main" id="go">最短コースを計算する</button>
+  <div style="display:flex;gap:8px;margin-top:8px"><button class="sub" id="voiceCmd" style="flex:1">🎤 音声で指示（1回）</button><button class="sub" id="standbyBtn" style="flex:1">🎧 音声待機：オフ</button></div>
+  <div class="small" style="margin-top:4px">「計算」「印刷」と話すと動きます。待機中はボタンを押さずに反応します（約5分で自動オフ）。</div>
   <button class="sub" id="reset" style="width:100%;margin-top:8px">🔄 リセット（新しい入力を始める）</button>
   <div id="msg"></div>
 </div>
@@ -165,7 +168,7 @@ a.link{display:block;margin:6px 0;color:#0b57d0}
 <div class="warn">
   ・住所→座標は国土地理院の住所検索API、道順・所要時間は OSRM 公開サーバー（OpenStreetMap）で計算します。<b>住所・座標がこれらの外部サービスに送信されます</b>（実名・病名は入力しないでください）。<br>
   ・所要時間は道路の平常時の目安で、渋滞・信号待ち・駐車の時間は含みません。余裕を持って「滞在時間」に駐車・移動時間を上乗せしてください。<br>
-  ・キーボードのマイク入力は、端末の音声入力（Apple／Google）に音声が送信されます。住所を声に出す際は周囲と取り扱いにご注意ください。<br>
+  ・音声入力・音声待機は、端末のブラウザの音声認識（Apple／Google）に音声が送信されます。待機中は周囲の会話も送られる可能性があるので、使わないときはオフにしてください。住所を声に出す際は周囲と取り扱いにご注意ください。<br>
   ・OSRM公開サーバーは試用向けです。業務で常用する場合は自前サーバーの利用を検討してください。
 </div>
 </main>
@@ -175,10 +178,11 @@ a.link{display:block;margin:6px 0;color:#0b57d0}
 <script>
 /* ---------- 共通ユーティリティ ---------- */
 /* ===== バージョン管理：修正のたびにここを更新（履歴は先頭が最新） ===== */
-const VERSION = '1.10.1', VERSION_DATE = '2026-11-15';
+const VERSION = '1.11.0', VERSION_DATE = '2026-11-15';
 const DEFAULT_ADDR = '東京都練馬区';
 const DEFAULT_START = '東京都練馬区東大泉6-3-3';
 const CHANGELOG = [
+  ['1.11.0','2026-11-20','アプリ内の音声入力を復活（各住所欄・出発地）／音声で計算・印刷を指示（1回／待機モード）／固まり対策（準備中表示・自動停止・再タップで停止）'],
   ['1.10.1','2026-11-20','印刷時、地図の左右が切れる問題を修正（印刷用に地図の大きさを固定し、余白を付けて全体を表示）'],
   ['1.10.0','2026-11-20','印刷：順番表を1ページ目、地図を2ページ目に分割／アプリ内の音声ボタンを廃止（キーボードのマイク入力を推奨）し、話した住所は入力欄を離れると自動で整形'],
   ['1.9.1','2026-11-20','音声入力が「聞いています」のまま戻らない問題を修正（再タップで停止／時間切れで自動停止／途中結果の確定／失敗時はキーボード入力へ誘導）'],
@@ -405,6 +409,109 @@ function normalizeField(inp){
 }
 $('start').addEventListener('change', ()=>normalizeField($('start')));
 
+/* ---------- 音声入力（Web Speech API）---------- */
+const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+let LISTEN_MS = 15000, HARD_MS = 25000, activeRec = null;
+function listen(btn, onText, onFail){
+  if(!SR){ toast('この端末・ブラウザは音声認識に対応していません。住所欄をタップして、キーボードのマイク🎤をお使いください。'); if(onFail) onFail(); return; }
+  if(standbyOn) stopStandby('音声待機をオフにしました（音声入力を優先します）');
+  // 聞き取り中にもう一度押したら停止
+  if(activeRec){ const a = activeRec; a.stop(); if(a.btn === btn) return; }
+  const rec = new SR(); rec.lang='ja-JP'; rec.continuous=false; rec.interimResults=true; rec.maxAlternatives=1;
+  const orig = btn.textContent; let text='', committed=false, failed=false, started=false, timer=null, hard=null, prep=null;
+  const reset = ()=>{ clearTimeout(timer); clearTimeout(hard); clearTimeout(prep); btn.textContent=orig; btn.classList.remove('listening'); if(activeRec && activeRec.rec===rec) activeRec=null; };
+  const commit = ()=>{
+    if(committed) return; committed=true;
+    const t = text.trim();
+    if(t){ try{ onText(t); }catch(err){ toast('認識結果の処理に失敗：'+err.message); } }
+    else if(!failed){ toast(started ? '音声が聞き取れませんでした。もう一度お試しください。' : '音声認識が始まりませんでした。住所欄をタップして、キーボードのマイク🎤をお使いください。'); if(onFail) onFail(); }
+  };
+  const stop = ()=>{            // 手動停止・時間切れ共通：結果を確定してボタンを必ず元に戻す
+    try{ rec.stop(); }catch(_){}
+    setTimeout(()=>{ commit(); reset(); try{ rec.abort(); }catch(_){} }, 700);
+  };
+  btn.textContent='🎙準備中…'; btn.classList.add('listening');
+  rec.onstart = ()=>{ started=true; clearTimeout(prep); clearTimeout(hard); btn.textContent='🎙停止'; toast('どうぞ話してください（もう一度押すと停止）'); timer=setTimeout(stop, LISTEN_MS); };
+  rec.onresult = e => {
+    started=true; text='';
+    for(let i=0;i<e.results.length;i++) text += e.results[i][0].transcript;
+    if(e.results[e.results.length-1].isFinal){ commit(); reset(); try{ rec.stop(); }catch(_){} }
+  };
+  rec.onspeechend = ()=>{ try{ rec.stop(); }catch(_){} };
+  rec.onerror = e => {
+    if(e.error==='aborted') return;
+    failed=true; reset();
+    toast(e.error==='not-allowed' ? 'マイクの使用が許可されていません（Safari/Chromeのサイト設定、または端末の「設定」でマイクと音声認識を許可してください）。'
+      : e.error==='service-not-allowed' ? '音声認識が使えません（端末の音声入力／Siriがオフの可能性があります）。キーボードのマイク🎤をお使いください。'
+      : e.error==='no-speech' ? '音声が聞き取れませんでした。' : '音声認識エラー：'+e.error);
+    if(onFail) onFail();
+  };
+  rec.onend = ()=>{ commit(); reset(); };
+  prep = setTimeout(()=>toast('まだ始まりません。マイク許可の画面が出ていないか確認してください。出ていなければ、もう一度押すか、キーボードのマイク🎤をお使いください。'), 6000);
+  hard = setTimeout(stop, HARD_MS);
+  activeRec = {rec, btn, stop};
+  try{ rec.start(); }
+  catch(err){ reset(); toast('音声認識を開始できませんでした：'+err.message); if(onFail) onFail(); }
+}
+function startVoiceAddr(inp, holder, btn){
+  listen(btn, text=>{
+    const a = normalizeAddr(text);
+    inp.value = a; delete holder.dataset.lat; delete holder.dataset.lon;
+    toast('入力：'+a+'（内容を確認してください）');
+  }, ()=>{ try{ inp.focus(); }catch(_){} });
+}
+$('startMic').onclick = e => startVoiceAddr($('start'), $('start'), e.currentTarget);
+
+/* 音声コマンド（計算・印刷） */
+function runCmd(text){
+  const t = text.replace(/\s+/g,'');
+  if(/計算|検索|ルート|最短/.test(t)){ toast('「'+text+'」→ 計算します'); $('go').click(); return true; }
+  if(/印刷|プリント/.test(t)){ toast('「'+text+'」→ 印刷します'); printRoute(); return true; }
+  return false;
+}
+$('voiceCmd').onclick = e => listen(e.currentTarget, text=>{ if(!runCmd(text)) toast('「'+text+'」は認識できませんでした（使える言葉：計算、印刷）'); });
+
+/* 音声待機：ボタンを押さずに「計算」「印刷」に反応（連続認識を自動再開。約5分で自動オフ） */
+let standbyOn=false, standbyRec=null, standbyTimer=null, standbyRestarts=[], lastCmdAt=0, STANDBY_MS=300000;
+function standbyUI(){ const b=$('standbyBtn'); b.textContent = standbyOn ? '🎧 待機中…タップで停止' : '🎧 音声待機：オフ'; b.classList.toggle('standby', standbyOn); }
+function stopStandby(msg){
+  standbyOn=false; clearTimeout(standbyTimer); standbyTimer=null;
+  if(standbyRec){ const r=standbyRec; standbyRec=null; try{ r.onend=null; r.stop(); }catch(_){} try{ r.abort(); }catch(_){} }
+  standbyUI(); if(msg) toast(msg);
+}
+function runStandby(){
+  if(!standbyOn) return;
+  const rec = new SR(); standbyRec = rec;
+  rec.lang='ja-JP'; rec.continuous=true; rec.interimResults=false; rec.maxAlternatives=1;
+  rec.onresult = e => {
+    for(let i=e.resultIndex||0;i<e.results.length;i++){
+      if(!e.results[i].isFinal) continue;
+      const t = e.results[i][0].transcript;
+      if(Date.now()-lastCmdAt < 3000) continue;          // 連続誤作動防止
+      if(runCmd(t)) lastCmdAt = Date.now();
+    }
+  };
+  rec.onerror = e => {
+    if(e.error==='not-allowed' || e.error==='service-not-allowed') stopStandby('マイクの使用が許可されていないため、音声待機を止めました。');
+  };
+  rec.onend = ()=>{
+    if(!standbyOn) return;
+    const now = Date.now(); standbyRestarts = standbyRestarts.filter(t=>now-t<20000); standbyRestarts.push(now);
+    if(standbyRestarts.length > 8){ stopStandby('音声認識が安定しないため、音声待機を止めました。「🎤音声で指示」をお使いください。'); return; }
+    setTimeout(runStandby, 400);
+  };
+  try{ rec.start(); }catch(err){ setTimeout(()=>{ if(standbyOn) runStandby(); }, 1000); }
+}
+$('standbyBtn').onclick = () => {
+  if(standbyOn){ stopStandby('音声待機をオフにしました。'); return; }
+  if(!SR){ toast('この端末・ブラウザは音声認識に対応していません。'); return; }
+  if(activeRec) activeRec.stop();
+  standbyOn=true; standbyRestarts=[]; standbyUI();
+  standbyTimer = setTimeout(()=>stopStandby('音声待機を自動でオフにしました（約5分）。'), STANDBY_MS);
+  toast('音声待機をオンにしました。「計算」「印刷」と話してください。許可を求められたら「許可」を押してください。');
+  runStandby();
+};
+
 /* ---------- 印刷 ---------- */
 let lastBounds = null;
 function printRoute(){
@@ -438,6 +545,7 @@ function addVisit(d={}){
      <div><label>住所</label><input type="text" class="f-addr" value="${esc(d.addr ?? DEFAULT_ADDR)}" placeholder="東京都練馬区…"></div>
      <div class="btns">
        <button class="pick" title="地図でタップして選ぶ">📍地図</button>
+       <button class="pick mic" title="音声で住所を入力">🎤音声</button>
        <button class="pick clr" title="この患家の入力をクリア">↺ クリア</button>
        <button class="del" title="この行を削除">✕</button>
      </div>
@@ -460,6 +568,7 @@ function addVisit(d={}){
   };
   div.querySelector('.pick').onclick = () => startPick(inp, div, div.querySelector('.f-name').value || '患家');
   inp.addEventListener('change', ()=>normalizeField(inp));
+  div.querySelector('.mic').onclick = (ev) => startVoiceAddr(inp, div, ev.currentTarget);
   $('visits').appendChild(div);
   relabel();
 }
