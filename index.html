@@ -7,7 +7,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-title" content="訪問ルート">
-<title>訪問診療 最短コース選定 v1.9.1</title>
+<title>訪問診療 最短コース選定 v1.10.0</title>
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
 <style>
 *{box-sizing:border-box}
@@ -23,7 +23,7 @@ input[type=text],input[type=time],input[type=number]{width:100%;padding:8px;bord
 .row2{display:grid;grid-template-columns:2fr 1fr;gap:8px}
 .visit{border:1px solid #e1e7ec;border-radius:8px;padding:8px;margin-bottom:8px;position:relative}
 .visit .g{display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:6px;margin-top:6px}
-.visit .top{display:grid;grid-template-columns:80px 1fr auto auto auto 32px;gap:6px;align-items:end}
+.visit .top{display:grid;grid-template-columns:80px 1fr auto auto 32px;gap:6px;align-items:end}
 .btns{display:contents}
 .visit .g > div,.visit .top > div{min-width:0}
 input[type=time],input[type=number]{min-width:0;max-width:100%;-webkit-appearance:none;appearance:none;display:block}
@@ -54,7 +54,7 @@ a.link{display:block;margin:6px 0;color:#0b57d0}
   .row2{grid-template-columns:1fr}
   .visit .top{grid-template-columns:52px 1fr;row-gap:6px}
   .visit .top .pick,.visit .top .del{height:44px;font-size:14px}
-  .visit .top .btns{grid-column:1 / -1;display:grid;grid-template-columns:1fr 1fr 1fr 52px;gap:6px}
+  .visit .top .btns{grid-column:1 / -1;display:grid;grid-template-columns:1fr 1fr 52px;gap:6px}
   .visit .g{grid-template-columns:minmax(0,1fr) minmax(0,1fr)}
   button.main{padding:14px;font-size:17px}
   button.sub{min-height:44px}
@@ -68,8 +68,8 @@ a.link{display:block;margin:6px 0;color:#0b57d0}
 #mapcard.picking #map{height:calc(100vh - 80px)}
 #nomap{display:none;background:#fdecea;border:1px solid #f1b0a8;border-radius:8px;padding:8px;margin:8px 12px;font-size:13px;color:#922}
 #toast{position:fixed;left:50%;bottom:24px;transform:translateX(-50%);background:#1c2733;color:#fff;padding:10px 14px;border-radius:10px;font-size:14px;z-index:3000;max-width:90vw;display:none}
-#printHead{display:none}
-.pre-print #map{height:105mm !important}
+#printHead,#mapTitle{display:none}
+.pre-print #map{height:225mm !important}
 .listening{background:#fdecea !important;color:#922 !important}
 @media print{
   @page{size:A4;margin:10mm}
@@ -80,7 +80,9 @@ a.link{display:block;margin:6px 0;color:#0b57d0}
   #printHead b{font-size:14pt}
   #resCard,#mapcard{display:block !important;box-shadow:none !important;padding:0 !important;margin:0 0 5mm !important}
   #links,#printBtn,#pickbar{display:none !important}
-  #map{height:105mm !important;border-radius:0}
+  #mapcard{break-before:page;page-break-before:always}
+  #mapTitle{display:block !important;font-size:11pt;margin-bottom:3mm}
+  #map{height:225mm !important;border-radius:0;border:1px solid #999}
   .stop{break-inside:avoid}
 }
 #pickbar{display:none;background:#fff3cd;border:1px solid #f0d98a;border-radius:8px;padding:8px;margin-bottom:8px;font-size:14px}
@@ -113,7 +115,7 @@ a.link{display:block;margin:6px 0;color:#0b57d0}
 <div class="card">
   <h2>① 出発地・時刻</h2>
   <div class="row2">
-    <div><label>出発地の住所（初期値：大泉生協病院）</label><div style="display:flex;gap:6px"><input type="text" id="start" value="東京都練馬区東大泉6-3-3" placeholder="例：東京都練馬区東大泉○-○-○"><button class="pick" id="startPick">📍地図</button><button class="pick mic" id="startMic" title="音声で住所を入力">🎤</button></div></div>
+    <div><label>出発地の住所（初期値：大泉生協病院）</label><div style="display:flex;gap:6px"><input type="text" id="start" value="東京都練馬区東大泉6-3-3" placeholder="例：東京都練馬区東大泉○-○-○"><button class="pick" id="startPick">📍地図</button></div></div>
     <div><label>出発時刻</label><input type="time" id="depart" value="13:30"></div>
   </div>
   <div style="margin-top:8px"><label><input type="checkbox" id="roundtrip" checked> 最後に出発地へ戻る</label></div>
@@ -134,7 +136,7 @@ a.link{display:block;margin:6px 0;color:#0b57d0}
 
 <div class="card">
   <h2>② 患家（8〜10件程度・最大12件）</h2>
-  <div class="small" style="margin-bottom:8px">患家の名前は A, B, C… が自動で付きます（個人名は入力不要）。住所は入力するか、「📍地図」を押して地図上の家をタップ（Googleマップの「緯度,経度」や長いURLの貼り付けも可）。<br>患家の都合は、あれば入力：例）14時以降なら在宅 →「以降」に14:00／16時までに来てほしい →「までに」に16:00。空欄なら指定なし。<br>「◯番目に訪問」は、順番を自分で決めたい患家だけ入力（例：Bを最初に→1）。空欄の患家は、残りの順番の中で最短になるよう自動で決まります。</div>
+  <div class="small" style="margin-bottom:8px">患家の名前は A, B, C… が自動で付きます（個人名は入力不要）。住所は入力するか、「📍地図」を押して地図上の家をタップ。住所欄をタップしてキーボードのマイク🎤で話して入力もできます（「六の三の三」→「6-3-3」のように、欄を離れると自動で整えます）。Googleマップの「緯度,経度」や長いURLの貼り付けも可。<br>患家の都合は、あれば入力：例）14時以降なら在宅 →「以降」に14:00／16時までに来てほしい →「までに」に16:00。空欄なら指定なし。<br>「◯番目に訪問」は、順番を自分で決めたい患家だけ入力（例：Bを最初に→1）。空欄の患家は、残りの順番の中で最短になるよう自動で決まります。</div>
   <div id="visits"></div>
   <div style="display:flex;gap:8px">
     <button class="sub" id="add">＋ 患家を追加</button>
@@ -144,7 +146,6 @@ a.link{display:block;margin:6px 0;color:#0b57d0}
 
 <div class="card">
   <button class="main" id="go">最短コースを計算する</button>
-  <button class="sub" id="voiceCmd" style="width:100%;margin-top:8px">🎤 音声で指示（「計算」「印刷」と話す）</button>
   <button class="sub" id="reset" style="width:100%;margin-top:8px">🔄 リセット（新しい入力を始める）</button>
   <div id="msg"></div>
 </div>
@@ -156,14 +157,14 @@ a.link{display:block;margin:6px 0;color:#0b57d0}
   <div id="list"></div>
   <div id="links" style="margin-top:8px"></div>
 </div>
-<div class="card" id="mapcard"><div id="pickbar"><span id="picktext"></span> <button class="sub" id="pickcancel">キャンセル</button></div><div id="map"></div></div>
+<div class="card" id="mapcard"><div id="mapTitle"><b>経路図</b>（Sは出発地、数字は訪問順）</div><div id="pickbar"><span id="picktext"></span> <button class="sub" id="pickcancel">キャンセル</button></div><div id="map"></div></div>
 
 <details class="card" style="margin-top:12px"><summary><b>バージョン履歴</b>（現在 <span id="ver2"></span>）</summary><div id="chlog" class="small" style="margin-top:8px;line-height:1.7"></div></details>
 
 <div class="warn">
   ・住所→座標は国土地理院の住所検索API、道順・所要時間は OSRM 公開サーバー（OpenStreetMap）で計算します。<b>住所・座標がこれらの外部サービスに送信されます</b>（実名・病名は入力しないでください）。<br>
   ・所要時間は道路の平常時の目安で、渋滞・信号待ち・駐車の時間は含みません。余裕を持って「滞在時間」に駐車・移動時間を上乗せしてください。<br>
-  ・音声入力・音声コマンドは、端末のブラウザの音声認識（Apple／Google）に音声が送信されます。住所を声に出す際は周囲と取り扱いにご注意ください。<br>
+  ・キーボードのマイク入力は、端末の音声入力（Apple／Google）に音声が送信されます。住所を声に出す際は周囲と取り扱いにご注意ください。<br>
   ・OSRM公開サーバーは試用向けです。業務で常用する場合は自前サーバーの利用を検討してください。
 </div>
 </main>
@@ -173,10 +174,11 @@ a.link{display:block;margin:6px 0;color:#0b57d0}
 <script>
 /* ---------- 共通ユーティリティ ---------- */
 /* ===== バージョン管理：修正のたびにここを更新（履歴は先頭が最新） ===== */
-const VERSION = '1.9.1', VERSION_DATE = '2026-11-15';
+const VERSION = '1.10.0', VERSION_DATE = '2026-11-15';
 const DEFAULT_ADDR = '東京都練馬区';
 const DEFAULT_START = '東京都練馬区東大泉6-3-3';
 const CHANGELOG = [
+  ['1.10.0','2026-11-20','印刷：順番表を1ページ目、地図を2ページ目に分割／アプリ内の音声ボタンを廃止（キーボードのマイク入力を推奨）し、話した住所は入力欄を離れると自動で整形'],
   ['1.9.1','2026-11-20','音声入力が「聞いています」のまま戻らない問題を修正（再タップで停止／時間切れで自動停止／途中結果の確定／失敗時はキーボード入力へ誘導）'],
   ['1.9.0','2026-11-20','結果（順番表＋地図）の印刷／住所の音声入力／音声コマンド（計算・印刷）を追加'],
   ['1.8.0','2026-11-19','患家ごとに「◯番目に訪問」を任意指定できる機能を追加（指定なしの患家は最短になるよう自動で配置）'],
@@ -373,7 +375,6 @@ let toastT=null;
 function toast(t){ const e=$('toast'); e.textContent=t; e.style.display='block'; clearTimeout(toastT); toastT=setTimeout(()=>e.style.display='none',4500); }
 
 /* ---------- 音声入力 ---------- */
-const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
 const KN={'〇':0,'零':0,'一':1,'二':2,'三':3,'四':4,'五':5,'六':6,'七':7,'八':8,'九':9};
 function kanjiNum(k){
   if(/^[〇零一二三四五六七八九]+$/.test(k)) return k.split('').map(c=>KN[c]).join('');
@@ -393,59 +394,14 @@ function normalizeAddr(t){
   if(/^[^\d都道府県]{1,5}[区市]/.test(t)) return '東京都'+t;
   return DEFAULT_ADDR + t;
 }
-let LISTEN_MS = 15000, activeRec = null;
-function listen(btn, onText, onFail){
-  if(!SR){ toast('この端末・ブラウザは音声認識に対応していません。キーボードのマイク🎤で音声入力できます。'); if(onFail) onFail(); return; }
-  // 聞き取り中にもう一度押したら停止（別のボタンなら前の分を止めて新しく開始）
-  if(activeRec){ const a = activeRec; a.stop(); if(a.btn === btn) return; }
-  const rec = new SR(); rec.lang='ja-JP'; rec.continuous=false; rec.interimResults=true; rec.maxAlternatives=1;
-  const orig = btn.textContent; let text='', committed=false, failed=false, timer=null;
-  const reset = ()=>{ clearTimeout(timer); btn.textContent=orig; btn.classList.remove('listening'); if(activeRec && activeRec.rec===rec) activeRec=null; };
-  const commit = ()=>{
-    if(committed) return; committed=true;
-    const t = text.trim();
-    if(t){ try{ onText(t); }catch(err){ toast('認識結果の処理に失敗：'+err.message); } }
-    else if(!failed){ toast('音声が聞き取れませんでした。キーボードのマイク🎤でも入力できます。'); if(onFail) onFail(); }
-  };
-  const stop = ()=>{            // 手動停止・時間切れ共通：結果を確定してボタンを必ず元に戻す
-    try{ rec.stop(); }catch(_){}
-    setTimeout(()=>{ commit(); reset(); try{ rec.abort(); }catch(_){} }, 700);
-  };
-  btn.textContent='🎙停止'; btn.classList.add('listening');
-  rec.onresult = e => {
-    text=''; for(let i=0;i<e.results.length;i++) text += e.results[i][0].transcript;
-    if(e.results[e.results.length-1].isFinal){ commit(); reset(); try{ rec.stop(); }catch(_){} }
-  };
-  rec.onspeechend = ()=>{ try{ rec.stop(); }catch(_){} };
-  rec.onerror = e => {
-    if(e.error==='aborted') return;
-    failed=true; reset();
-    toast(e.error==='not-allowed' ? 'マイクの使用が許可されていません（Safari/Chromeのサイト設定、または端末の「設定」でマイクと音声認識を許可してください）。'
-      : e.error==='service-not-allowed' ? '音声認識が使えません（端末の音声入力／Siriがオフの可能性があります）。キーボードのマイク🎤をお使いください。'
-      : e.error==='no-speech' ? '音声が聞き取れませんでした。' : '音声認識エラー：'+e.error);
-    if(onFail) onFail();
-  };
-  rec.onend = ()=>{ commit(); reset(); };
-  timer = setTimeout(stop, LISTEN_MS);
-  activeRec = {rec, btn, stop};
-  try{ rec.start(); toast('聞いています…話してください（許可を求められたら「許可」。もう一度押すと停止）'); }
-  catch(err){ reset(); toast('音声認識を開始できませんでした：'+err.message); if(onFail) onFail(); }
+/* 住所欄：キーボードの音声入力などで入った文字を整える（入力欄を離れたとき） */
+function normalizeField(inp){
+  const v = inp.value.trim();
+  if(!v || v===DEFAULT_ADDR || /^地図の地点/.test(v)) return;
+  const a = normalizeAddr(v);
+  if(a !== inp.value){ inp.value = a; toast('住所を整えました：'+a); }
 }
-function startVoiceAddr(inp, holder, btn){
-  listen(btn, text=>{
-    const a = normalizeAddr(text);
-    inp.value = a; delete holder.dataset.lat; delete holder.dataset.lon;
-    toast('入力：'+a+'（内容を確認してください）');
-  }, ()=>{ try{ inp.focus(); }catch(_){} });
-}
-$('startMic').onclick = e => startVoiceAddr($('start'), $('start'), e.currentTarget);
-/* 音声コマンド */
-$('voiceCmd').onclick = e => listen(e.currentTarget, text=>{
-  const t = text.replace(/\s+/g,'');
-  if(/計算|検索|ルート|最短|スタート|開始/.test(t)){ toast('「'+text+'」→ 計算します'); $('go').click(); }
-  else if(/印刷|プリント/.test(t)){ toast('「'+text+'」→ 印刷します'); printRoute(); }
-  else toast('「'+text+'」は認識できませんでした（使える言葉：計算、印刷）');
-});
+$('start').addEventListener('change', ()=>normalizeField($('start')));
 
 /* ---------- 印刷 ---------- */
 let lastBounds = null;
@@ -480,7 +436,6 @@ function addVisit(d={}){
      <div><label>住所</label><input type="text" class="f-addr" value="${esc(d.addr ?? DEFAULT_ADDR)}" placeholder="東京都練馬区…"></div>
      <div class="btns">
        <button class="pick" title="地図でタップして選ぶ">📍地図</button>
-       <button class="pick mic" title="音声で住所を入力">🎤音声</button>
        <button class="pick clr" title="この患家の入力をクリア">↺ クリア</button>
        <button class="del" title="この行を削除">✕</button>
      </div>
@@ -502,7 +457,7 @@ function addVisit(d={}){
     if(pickTarget && pickTarget.holder === div) endPick();
   };
   div.querySelector('.pick').onclick = () => startPick(inp, div, div.querySelector('.f-name').value || '患家');
-  div.querySelector('.mic').onclick = (ev) => startVoiceAddr(inp, div, ev.currentTarget);
+  inp.addEventListener('change', ()=>normalizeField(inp));
   $('visits').appendChild(div);
   relabel();
 }
